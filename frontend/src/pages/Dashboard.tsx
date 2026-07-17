@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Activity, Terminal, Clock, RefreshCw, Save, ToggleLeft, ToggleRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
-import { listScreens, type ScreenTask } from "../lib/api";
+import { listScreens, saveScreenLog, type ScreenTask } from "../lib/api";
 
 interface LogLine {
   text: string;
@@ -68,33 +68,30 @@ export default function Dashboard() {
     return { text: line, ts: Date.now() };
   };
 
-  const saveLogs = useCallback(() => {
-    if (!selectedScreen || logs.length === 0) return;
-    const logText = logs.map((l) => l.text).join("\n");
-    const blob = new Blob([logText], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const ts = new Date().toISOString().replace(/[:.]/g, "-");
-    a.download = `${selectedScreen.name}_${ts}.log`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setLastSaveTime(new Date().toLocaleString());
-  }, [selectedScreen, logs]);
+  const saveLogs = useCallback(async () => {
+    if (!selectedScreen) return;
+    try {
+      const result = await saveScreenLog(selectedScreen.name);
+      if (result.success) {
+        setLastSaveTime(new Date().toLocaleString());
+      }
+    } catch (e) {
+      console.error("Failed to save log:", e);
+    }
+  }, [selectedScreen]);
 
-  const toggleAutoSave = () => {
+  const toggleAutoSave = async () => {
     if (autoSaveEnabled) {
       if (saveTimerRef.current) {
         clearInterval(saveTimerRef.current);
         saveTimerRef.current = null;
       }
+      setAutoSaveEnabled(false);
     } else {
-      saveLogs();
+      await saveLogs();
       saveTimerRef.current = window.setInterval(saveLogs, autoSaveInterval * 1000);
+      setAutoSaveEnabled(true);
     }
-    setAutoSaveEnabled(!autoSaveEnabled);
   };
 
   const loadScreens = async () => {

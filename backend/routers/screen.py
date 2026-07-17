@@ -425,3 +425,25 @@ async def delete_session_logs(session_name: str):
         return GenericResp(success=True, message=f"会话 '{session_name}' 的所有日志已删除")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/save-log/{name}", response_model=GenericResp)
+async def save_screen_log_to_history(name: str, db: Session = Depends(get_db)):
+    """将当前screen会话的日志保存到历史日志文件夹"""
+    from backend.services.screen_service import get_session_log_path
+    log_path = get_session_log_path(name)
+    
+    if not os.path.exists(log_path):
+        raise HTTPException(status_code=404, detail="日志文件不存在")
+    
+    try:
+        session_log_dir = os.path.join(LOG_DIR, name)
+        os.makedirs(session_log_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = os.path.join(session_log_dir, f"{timestamp}.log")
+        
+        import shutil
+        shutil.copy2(log_path, save_path)
+        return GenericResp(success=True, message=f"日志已保存到历史记录: {save_path}", data={"path": save_path})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

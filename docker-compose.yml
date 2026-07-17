@@ -12,24 +12,23 @@ services:
       - ./logs:/app/logs
       - ./scripts:/app/scripts
       - ./downloads:/app/downloads
-      - ./frontend/dist:/app/frontend/dist:ro
-      - ./backend:/app/backend:ro
     environment:
       - PYTHONUNBUFFERED=1
       - API_KEY=your_api_key_here
       - SECRET_KEY=change_me_to_a_random_string
       - SCREENDIR=/app/screen_sockets
       - LOG_LEVEL=info
+      - TZ=Asia/Shanghai
     restart: unless-stopped
     privileged: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     networks:
       - workbench-net
 

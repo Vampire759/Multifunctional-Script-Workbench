@@ -251,10 +251,6 @@ def stop_screen(name):
 
 def save_screen_log(name):
     escaped_name = name.replace("'", "'\\''")
-    log_file = f'/tmp/screen_log_{escaped_name}.txt'
-    
-    if not os.path.exists(log_file):
-        return {'success': False, 'message': 'Log file not found'}
     
     save_dir = _auto_save_config['save_dir']
     os.makedirs(save_dir, exist_ok=True)
@@ -263,11 +259,29 @@ def save_screen_log(name):
     save_file = os.path.join(save_dir, f'{name}_{timestamp}.log')
     
     try:
-        with open(log_file, 'rb') as src:
-            content = src.read()
-        with open(save_file, 'wb') as dst:
-            dst.write(content)
-        return {'success': True, 'message': f'Log saved to {save_file}', 'file': save_file}
+        result = run_command(f"screen -S '{escaped_name}' -X hardcopy /tmp/screen_hardcopy_{escaped_name}.tmp")
+        if result['success']:
+            time.sleep(0.5)
+            tmp_file = f'/tmp/screen_hardcopy_{escaped_name}.tmp'
+            if os.path.exists(tmp_file):
+                with open(tmp_file, 'r', encoding='utf-8', errors='replace') as src:
+                    content = src.read()
+                with open(save_file, 'w', encoding='utf-8') as dst:
+                    dst.write(content)
+                return {'success': True, 'message': f'Log saved to {save_file}', 'file': save_file}
+        
+        result = run_command(f"screen -S '{escaped_name}' -p 0 -X hardcopy -h /tmp/screen_hardcopy_{escaped_name}.tmp")
+        if result['success']:
+            time.sleep(0.5)
+            tmp_file = f'/tmp/screen_hardcopy_{escaped_name}.tmp'
+            if os.path.exists(tmp_file):
+                with open(tmp_file, 'r', encoding='utf-8', errors='replace') as src:
+                    content = src.read()
+                with open(save_file, 'w', encoding='utf-8') as dst:
+                    dst.write(content)
+                return {'success': True, 'message': f'Log saved to {save_file}', 'file': save_file}
+        
+        return {'success': False, 'message': 'Failed to capture screen log'}
     except Exception as e:
         return {'success': False, 'message': f'Failed to save log: {str(e)}'}
 

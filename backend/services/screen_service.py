@@ -63,7 +63,9 @@ async def list_screens() -> List[Dict]:
     screens = []
     
     try:
-        output = await _run_command(["screen", "-list"])
+        env = os.environ.copy()
+        env['SCREENDIR'] = SCREEN_SOCK_DIR
+        output = await _run_command(["screen", "-list"], env=env)
         lines = output.strip().split("\n")
         for line in lines:
             if "No Sockets" in line or "Sockets in" in line or "Remove dead" in line:
@@ -175,10 +177,12 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
 
                     screen_cmd = [
                         "screen", "-dmS", session_name,
-                        "script", "-f", "-q", "-c",
-                        "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i",
-                        log_path
+                        "/bin/bash", "-i"
                     ]
+                    
+                    logger.info(f"Creating screen session: {' '.join(screen_cmd)}")
+                    logger.info(f"SCREENDIR: {SCREEN_SOCK_DIR}")
+                    logger.info(f"Log path: {log_path}")
                     
                     proc = await asyncio.create_subprocess_exec(
                         *screen_cmd,
@@ -194,6 +198,8 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                     logger.info(f"Screen create attempt {attempt + 1}, exit code: {proc.returncode}")
                     if stderr_str:
                         logger.info(f"Screen stderr: {stderr_str}")
+                    if stdout_str:
+                        logger.info(f"Screen stdout: {stdout_str}")
                     
                     await asyncio.sleep(2)
                     
@@ -205,7 +211,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                         logger.info(f"Screen session created successfully: {session_name}")
                         break
                     else:
-                        last_error = f"Exit code: {proc.returncode}, stderr: {stderr_str}"
+                        last_error = f"Exit code: {proc.returncode}, stderr: {stderr_str}, stdout: {stdout_str}"
                         logger.warning(f"Session not found after attempt {attempt + 1}: {last_error}")
                         if attempt < max_retries:
                             await asyncio.sleep(1)
@@ -221,11 +227,20 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 db.commit()
                 return False
             
-            init_msg = f"echo '[SESSION INIT] {session_name}' && echo '[TIME] {datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}' && echo '[STATUS] 会话已创建，等待命令执行...'\n"
+            await _run_command([
+                "screen", "-S", session_name, "-X", "logfile", log_path
+            ], env=env)
+            await _run_command([
+                "screen", "-S", session_name, "-X", "log", "on"
+            ], env=env)
+            logger.info(f"Enabled logging for {session_name} to {log_path}")
+            
+            time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            init_msg = f"echo '[SESSION INIT] {session_name}' && echo '[TIME] {time_str}' && echo '[STATUS] 会话已创建，等待命令执行...'\n"
             await _run_command([
                 "screen", "-S", session_name, "-X", "stuff",
                 init_msg
-            ])
+            ], env=env)
             
             await asyncio.sleep(0.5)
             
@@ -235,7 +250,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 await _run_command([
                     "screen", "-S", session_name, "-X", "stuff",
                     f"{escaped_cmd}\n"
-                ])
+                ], env=env)
         
         await asyncio.sleep(1)
         
@@ -268,8 +283,10 @@ async def send_command(session_name: str, command: str) -> bool:
         return False
     
     try:
+        env = os.environ.copy()
+        env['SCREENDIR'] = SCREEN_SOCK_DIR
         escaped_cmd = command.replace("'", "'\\''")
-        await _run_command(["screen", "-S", session_name, "-X", "stuff", f"{escaped_cmd}\n"])
+        await _run_command(["screen", "-S", session_name, "-X", "stuff", f"{escaped_cmd}\n"], env=env)
         await hub.broadcast(f"screen_{session_name}", {
             "type": "log",
             "payload": {"log_line": f"> {command}", "level": "input"},
@@ -371,7 +388,9 @@ async def stop_screen(session_name: str, db: Session = None) -> bool:
             except:
                 pass
     else:
-        await _run_command(["screen", "-S", session_name, "-X", "quit"])
+        env = os.environ.copy()
+        env['SCREENDIR'] = SCREEN_SOCK_DIR
+        await _run_command(["screen", "-S", session_name, "-X", "quit"], env=env)
     
     await asyncio.sleep(1)
     
