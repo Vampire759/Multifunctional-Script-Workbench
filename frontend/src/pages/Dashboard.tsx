@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Activity, Terminal, Play, Square, Clock, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
-import { listScripts, listScreens, executeScript, stopScreen, type Script, type ScreenTask } from "../lib/api";
+import { listScripts, listScreens, executeScript, type Script, type ScreenTask } from "../lib/api";
 import { useNavigate } from "react-router-dom";
 
 interface LogLine {
@@ -179,19 +179,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleStop = async (screen: ScreenTask) => {
-    if (!confirm(`确认终止 "${screen.name}"？`)) return;
-    try {
-      await stopScreen(screen.name);
-      await loadScreens();
-      if (selectedScreen?.name === screen.name) {
-        setSelectedScreen(null);
-      }
-    } catch (e: any) {
-      alert(e?.response?.data?.detail || "操作失败");
-    }
-  };
-
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -330,9 +317,6 @@ export default function Dashboard() {
                         <RefreshCw size={12} /> 回到底部
                       </button>
                     )}
-                    <button onClick={() => handleStop(selectedScreen)} className="btn-amber flex items-center gap-2">
-                      <Square size={14} /> 终止
-                    </button>
                   </div>
                 </div>
 

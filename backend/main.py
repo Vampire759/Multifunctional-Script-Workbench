@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from backend.database import init_db
 from backend.services.scheduler_service import start_scheduler, shutdown_scheduler
 from backend.services.auth_service import init_admin_user
-from backend.routers import scrape, tasks, schedules, results, downloads, auth, screen, scripts, terminal, local_screen
+from backend.routers import scrape, tasks, schedules, results, downloads, auth, screen, scripts, terminal, local_screen, packages
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
@@ -72,6 +72,7 @@ app.include_router(screen.router)
 app.include_router(scripts.router)
 app.include_router(terminal.router)
 app.include_router(local_screen.router)
+app.include_router(packages.router)
 
 
 @app.get("/api/health")

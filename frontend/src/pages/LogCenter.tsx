@@ -460,7 +460,7 @@ export default function LogCenter() {
                 )}
                 {tasks.map((task) => (
                   <motion.div
-                    key={task.name}
+                    key={task.id || task.name}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     onClick={() => { setSelectedTask(task); setSelectedLogFile(null); }}

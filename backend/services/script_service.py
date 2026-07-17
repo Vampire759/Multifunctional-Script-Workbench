@@ -69,6 +69,11 @@ PACKAGE_NAME_MAP = {
     "jwt": "PyJWT",
 }
 
+EXTRA_PACKAGES_MAP = {
+    "bs4": ["lxml"],
+    "selenium": ["webdriver-manager"],
+}
+
 
 def parse_imports(content: str) -> Set[str]:
     imports = set()
@@ -116,6 +121,15 @@ def install_missing_dependencies(script_content: str) -> List[str]:
                 missing.append(pkg)
         else:
             installed.append(mod)
+    
+    for mod in imports:
+        extra_pkgs = EXTRA_PACKAGES_MAP.get(mod, [])
+        for extra_pkg in extra_pkgs:
+            if extra_pkg not in missing:
+                try:
+                    __import__(extra_pkg.replace("-", "_"))
+                except ImportError:
+                    missing.append(extra_pkg)
     
     if missing:
         try:

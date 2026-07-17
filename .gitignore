@@ -50,6 +50,10 @@ logs/
 # Downloads
 downloads/
 
+# User scripts
+scripts/
+backend/scripts/
+
 # Environment variables
 .env
 .env.local

@@ -89,14 +89,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ------------------------------------------------------------
 # 配置 UTF-8 区域设置（支持中文显示）
+# 使用 C.UTF-8 确保在 slim 镜像中可用，无需额外生成 locale
 # ------------------------------------------------------------
-RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
-    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
-    && locale-gen
-
-ENV LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8 \
+ENV LANG=C.UTF-8 \
+    LANGUAGE=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONIOENCODING=utf-8 \

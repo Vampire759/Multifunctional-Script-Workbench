@@ -106,6 +106,12 @@ async def list_screens() -> List[Dict]:
 
 
 async def create_screen(session_name: str, command: str, db: Session) -> bool:
+    screens = await list_screens()
+    existing_screen = any(s["name"] == session_name for s in screens)
+    if existing_screen:
+        await stop_screen(session_name)
+        await asyncio.sleep(1)
+    
     log_path = get_screen_log_path(session_name)
     
     task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
@@ -141,13 +147,13 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
             try:
                 env = os.environ.copy()
                 env['TERM'] = 'xterm-256color'
-                env['LANG'] = 'en_US.UTF-8'
-                env['LC_ALL'] = 'en_US.UTF-8'
+                env['LANG'] = 'C.UTF-8'
+                env['LC_ALL'] = 'C.UTF-8'
 
                 screen_cmd = [
                     "screen", "-dmS", session_name,
                     "script", "-f", "-q", log_path,
-                    "-c", "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 /bin/bash -i"
+                    "-c", "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i"
                 ]
                 
                 proc = await asyncio.create_subprocess_exec(

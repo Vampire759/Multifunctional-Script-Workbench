@@ -8,6 +8,7 @@ import Tasks from "./pages/Tasks";
 import Scripts from "./pages/Scripts";
 import Profile from "./pages/Profile";
 import LocalScreen from "./pages/LocalScreen";
+import PackageSettings from "./pages/PackageSettings";
 
 import Login from "./pages/Login";
 
@@ -38,6 +39,7 @@ export default function App() {
                 <Route path="/scripts" element={<Scripts />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/local-screen" element={<LocalScreen />} />
+                <Route path="/packages" element={<PackageSettings />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Layout>
