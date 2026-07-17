@@ -147,7 +147,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 screen_cmd = [
                     "screen", "-dmS", session_name,
                     "script", "-f", "-q", log_path,
-                    "-c", "/bin/bash -i"
+                    "-c", "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 /bin/bash -i"
                 ]
                 
                 proc = await asyncio.create_subprocess_exec(
@@ -309,7 +309,7 @@ async def _broadcast_log(session_name: str, log_path: str):
         await asyncio.sleep(1)
 
 
-async def stop_screen(session_name: str, db: Session) -> bool:
+async def stop_screen(session_name: str, db: Session = None) -> bool:
     if IS_WINDOWS:
         if session_name in _running_processes:
             proc = _running_processes[session_name]
@@ -324,11 +324,12 @@ async def stop_screen(session_name: str, db: Session) -> bool:
     
     await asyncio.sleep(1)
     
-    task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
-    if task:
-        task.status = "stopped"
-        task.finished_at = datetime.utcnow()
-        db.commit()
+    if db:
+        task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
+        if task:
+            task.status = "stopped"
+            task.finished_at = datetime.utcnow()
+            db.commit()
     
     screens = await list_screens()
     return not any(s["name"] == session_name for s in screens)

@@ -117,33 +117,20 @@ async def list_screen_sessions(db: Session = Depends(get_db)):
     
     for screen in screens:
         task = task_map.get(screen["name"])
+        if not task:
+            continue
         result.append({
-            "id": task.id if task else None,
+            "id": task.id,
             "name": screen["name"],
-            "command": task.command if task else "",
+            "command": task.command,
             "status": screen["status"],
             "pid": screen.get("pid"),
-            "log_path": task.log_path if task else "",
-            "error": task.error if task else "",
-            "started_at": task.started_at.isoformat() if task and task.started_at else None,
-            "finished_at": task.finished_at.isoformat() if task and task.finished_at else None,
-            "created_at": task.created_at.isoformat() if task and task.created_at else None,
+            "log_path": task.log_path,
+            "error": task.error,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
         })
-    
-    for task in tasks:
-        if task.name not in {s["name"] for s in screens}:
-            result.append({
-                "id": task.id,
-                "name": task.name,
-                "command": task.command,
-                "status": task.status,
-                "pid": None,
-                "log_path": task.log_path,
-                "error": task.error,
-                "started_at": task.started_at.isoformat() if task.started_at else None,
-                "finished_at": task.finished_at.isoformat() if task.finished_at else None,
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-            })
     
     return result
 
@@ -189,7 +176,7 @@ async def delete_screen_task(name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="会话不存在")
     
     if screen_exists:
-        await screen_service.stop_screen(name, db)
+        await screen_service.stop_screen(name)
     
     if task:
         db.delete(task)
