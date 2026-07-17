@@ -162,9 +162,18 @@ export default function Dashboard() {
 
   const handleExecute = async (script: Script) => {
     try {
-      await executeScript(script.id);
+      const result = await executeScript(script.id);
       setSelectedScript(script);
       await loadScreens();
+      const sessionName = result?.session_name || `script_${script.name}`;
+      const screens = await listScreens();
+      const target = screens.find((s) => s.name === sessionName);
+      if (target) {
+        setSelectedScreen(target);
+      } else if (screens.length > 0) {
+        const latest = screens.find((s) => s.name.startsWith("script_"));
+        if (latest) setSelectedScreen(latest);
+      }
     } catch (e: any) {
       alert(e?.response?.data?.detail || "执行失败");
     }
@@ -379,12 +388,12 @@ export default function Dashboard() {
                   )}
                   {scriptScreens.map((screen) => (
                     <motion.div
-                      key={screen.id}
+                      key={screen.name}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       onClick={() => setSelectedScreen(screen)}
                       className={`p-4 border border-ink-700/40 rounded-lg cursor-pointer transition-all ${
-                        selectedScreen?.id === screen.id
+                        selectedScreen?.name === screen.name
                           ? "border-neon-cyan/50 bg-neon-cyan/5"
                           : "hover:border-ink-600 hover:bg-ink-800/30"
                       }`}

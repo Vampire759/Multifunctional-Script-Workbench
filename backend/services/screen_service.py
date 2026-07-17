@@ -122,6 +122,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
         task.command = command
         task.status = "running"
         task.started_at = datetime.utcnow()
+        task.log_path = log_path
     db.commit()
     db.refresh(task)
 
@@ -140,8 +141,14 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
             try:
                 env = os.environ.copy()
                 env['TERM'] = 'xterm-256color'
-                
-                screen_cmd = ["screen", "-dmS", session_name, "/bin/bash", "-i"]
+                env['LANG'] = 'en_US.UTF-8'
+                env['LC_ALL'] = 'en_US.UTF-8'
+
+                screen_cmd = [
+                    "screen", "-dmS", session_name,
+                    "script", "-f", "-q", log_path,
+                    "-c", "/bin/bash -i"
+                ]
                 
                 proc = await asyncio.create_subprocess_exec(
                     *screen_cmd,
@@ -155,8 +162,10 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 stderr_str = stderr.decode("utf-8", errors="replace")
                 
                 logger.info(f"Screen process exited with code: {proc.returncode}")
-                logger.info(f"Screen stdout: {stdout_str}")
-                logger.info(f"Screen stderr: {stderr_str}")
+                if stdout_str:
+                    logger.info(f"Screen stdout: {stdout_str}")
+                if stderr_str:
+                    logger.info(f"Screen stderr: {stderr_str}")
                 
                 await asyncio.sleep(1)
                 
@@ -169,7 +178,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                     db.commit()
                     return False
                 
-                logger.info(f"Screen session created successfully: {session_name}")
+                logger.info(f"Screen session created successfully: {session_name}, log_path: {log_path}")
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
@@ -180,42 +189,8 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 return False
             
             if command.strip():
-                cmd_lower = command.strip().lower()
-                logger.info(f"Original command: {command}")
-                logger.info(f"Command lower: {cmd_lower}")
-                
-                if cmd_lower.startswith("python ") or cmd_lower.startswith("python3 "):
-                    parts = command.split(" ", 1)
-                    logger.info(f"Command parts: {parts}")
-                    if len(parts) >= 2:
-                        script_part = parts[1]
-                        logger.info(f"Script part: {script_part}")
-                        if script_part.startswith("/app/scripts/") or script_part.startswith("scripts/"):
-                            if script_part.startswith("scripts/"):
-                                script_path = f"/app/{script_part}"
-                            else:
-                                script_path = script_part
-                            
-                            script_args = []
-                            if " " in script_part:
-                                script_path_part, args_part = script_part.split(" ", 1)
-                                if script_path_part.startswith("scripts/"):
-                                    script_path = f"/app/{script_path_part}"
-                                else:
-                                    script_path = script_path_part
-                                script_args = args_part.split(" ")
-                            
-                            wrapped_cmd = f"python /app/scripts/auto_run.py {script_path} {' '.join(script_args)}"
-                            escaped_cmd = wrapped_cmd.replace("'", "'\\''")
-                            logger.info(f"Wrapped command: {wrapped_cmd}")
-                        else:
-                            escaped_cmd = command.replace("'", "'\\''")
-                    else:
-                        escaped_cmd = command.replace("'", "'\\''")
-                else:
-                    escaped_cmd = command.replace("'", "'\\''")
-                
-                logger.info(f"Sending to screen: {escaped_cmd}")
+                escaped_cmd = command.replace("'", "'\\''")
+                logger.info(f"Sending to screen: {command}")
                 await _run_command([
                     "screen", "-S", session_name, "-X", "stuff",
                     f"{escaped_cmd}\n"
@@ -287,6 +262,21 @@ async def _broadcast_log(session_name: str, log_path: str):
             
             if not screen_exists:
                 logger.info(f"Session {session_name} no longer exists, stopping broadcast")
+                try:
+                    if os.path.exists(log_path):
+                        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                            f.seek(last_pos)
+                            content = f.read()
+                            if content:
+                                for line in content.split("\n"):
+                                    if line.strip():
+                                        stripped = _clean_log_content(line.strip())
+                                        await hub.broadcast(f"screen_{session_name}", {
+                                            "type": "log",
+                                            "payload": {"log_line": stripped},
+                                        })
+                except Exception:
+                    pass
                 await hub.broadcast(f"screen_{session_name}", {
                     "type": "done",
                     "payload": {"status": "exited"},
@@ -294,12 +284,6 @@ async def _broadcast_log(session_name: str, log_path: str):
                 break
             
             if not os.path.exists(log_path):
-                try:
-                    await _run_command(["screen", "-S", session_name, "-X", "logfile", log_path])
-                    await _run_command(["screen", "-S", session_name, "-X", "log", "on"])
-                    logger.info(f"Enabled logging for {session_name} to {log_path}")
-                except Exception as e:
-                    logger.error(f"Failed to enable logging for {session_name}: {e}")
                 await asyncio.sleep(1)
                 continue
             
@@ -309,13 +293,12 @@ async def _broadcast_log(session_name: str, log_path: str):
                     content = f.read()
                     if content:
                         lines = content.split("\n")
-                        logger.debug(f"Found {len(lines)} new lines for {session_name}")
                         for line in lines:
                             if line.strip():
-                                stripped = _strip_ansi_codes(line.strip())
+                                cleaned = _clean_log_content(line.strip())
                                 await hub.broadcast(f"screen_{session_name}", {
                                     "type": "log",
-                                    "payload": {"log_line": stripped},
+                                    "payload": {"log_line": cleaned},
                                 })
                         last_pos = f.tell()
             except OSError as e:
@@ -351,27 +334,25 @@ async def stop_screen(session_name: str, db: Session) -> bool:
     return not any(s["name"] == session_name for s in screens)
 
 
-def _strip_ansi_codes(text: str) -> str:
+def _clean_log_content(text: str) -> str:
+    """清理日志内容：移除 ANSI 转义码、控制字符，保留可读文本"""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[.*?[a-zA-Z])')
-    return ansi_escape.sub('', text)
+    text = ansi_escape.sub('', text)
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    text = re.sub(r'\r+', '', text)
+    return text
 
 async def get_screen_log(session_name: str, tail_lines: int = 100) -> str:
-    log_path = get_screen_log_path(session_name)
+    log_path = get_session_log_path(session_name)
     
     try:
-        screens = await list_screens()
-        screen_exists = any(s["name"] == session_name for s in screens)
-        
-        if screen_exists:
-            await _run_command(["screen", "-S", session_name, "-X", "hardcopy", "-h", log_path])
-        
         if not os.path.exists(log_path):
             return ""
         
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
             content = "".join(lines[-tail_lines:])
-            return _strip_ansi_codes(content)
+            return _clean_log_content(content)
     except:
         return ""
 
