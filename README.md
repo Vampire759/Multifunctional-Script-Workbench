@@ -106,6 +106,10 @@
 - 向会话发送命令
 - 自动保存会话日志到日志中心
 - 支持中文字符正确显示
+- **定时保存日志** - 可配置间隔自动保存日志到宿主机本地
+- **手动保存日志** - 一键保存当前日志到宿主机
+- **自定义保存路径** - 可配置日志保存目录（默认 ~/screen_logs）
+- **保存设置持久化** - 支持配置保存间隔和路径
 
 ### 📦 脚本库设置
 - 查看已安装的 Python 包列表（基于 importlib.metadata 准确检测）
@@ -490,6 +494,12 @@ sudo systemctl start workbench-agent
 - `POST /api/local-screen/stop/{name}` - 停止宿主机 Screen 会话
 - `GET /api/local-screen/log/{name}` - 获取宿主机会话日志
 - `WS /api/local-screen/ws/{name}` - 宿主机会话 WebSocket
+- `POST /api/local-screen/save/{name}` - 手动保存日志到宿主机
+- `GET /api/local-screen/auto-save/config` - 获取定时保存配置
+- `POST /api/local-screen/auto-save/config` - 设置定时保存配置
+- `GET /api/local-screen/auto-save/status/{name}` - 获取会话定时保存状态
+- `POST /api/local-screen/auto-save/start/{name}` - 启动会话定时保存
+- `POST /api/local-screen/auto-save/stop/{name}` - 停止会话定时保存
 
 #### 日志中心
 - `GET /api/logs/files` - 获取日志文件列表

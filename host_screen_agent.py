@@ -11,10 +11,22 @@ import json
 import subprocess
 import socketserver
 import http.server
+import threading
+import time
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
 HOST = '0.0.0.0'
 PORT = 3001
+
+_auto_save_config = {
+    'enabled': False,
+    'interval': 300,
+    'save_dir': os.path.expanduser('~/screen_logs'),
+}
+
+_auto_save_threads = {}
+_auto_save_lock = threading.Lock()
 
 
 def run_command(cmd):
@@ -231,9 +243,103 @@ def stop_screen(name):
     escaped_name = name.replace("'", "'\\''")
     result = run_command(f"screen -S '{escaped_name}' -X quit")
     if result['success']:
+        _stop_auto_save(name)
         return {'success': True, 'message': f'Screen session stopped: {name}'}
     else:
         return {'success': False, 'message': f'Failed to stop screen: {result["stderr"]}'}
+
+
+def save_screen_log(name):
+    escaped_name = name.replace("'", "'\\''")
+    log_file = f'/tmp/screen_log_{escaped_name}.txt'
+    
+    if not os.path.exists(log_file):
+        return {'success': False, 'message': 'Log file not found'}
+    
+    save_dir = _auto_save_config['save_dir']
+    os.makedirs(save_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    save_file = os.path.join(save_dir, f'{name}_{timestamp}.log')
+    
+    try:
+        with open(log_file, 'rb') as src:
+            content = src.read()
+        with open(save_file, 'wb') as dst:
+            dst.write(content)
+        return {'success': True, 'message': f'Log saved to {save_file}', 'file': save_file}
+    except Exception as e:
+        return {'success': False, 'message': f'Failed to save log: {str(e)}'}
+
+
+def _auto_save_worker(name, interval):
+    while True:
+        with _auto_save_lock:
+            if name not in _auto_save_threads or _auto_save_threads[name]['stopped']:
+                break
+        try:
+            save_screen_log(name)
+        except Exception:
+            pass
+        time.sleep(interval)
+
+
+def start_auto_save(name, interval=None):
+    interval = interval or _auto_save_config['interval']
+    
+    with _auto_save_lock:
+        if name in _auto_save_threads and not _auto_save_threads[name]['stopped']:
+            return {'success': True, 'message': f'Auto save already running for {name}'}
+        
+        thread = threading.Thread(target=_auto_save_worker, args=(name, interval), daemon=True)
+        _auto_save_threads[name] = {
+            'thread': thread,
+            'stopped': False,
+            'interval': interval,
+            'started_at': datetime.now().isoformat()
+        }
+        thread.start()
+    
+    return {'success': True, 'message': f'Auto save started for {name} (interval: {interval}s)'}
+
+
+def stop_auto_save(name):
+    _stop_auto_save(name)
+    return {'success': True, 'message': f'Auto save stopped for {name}'}
+
+
+def _stop_auto_save(name):
+    with _auto_save_lock:
+        if name in _auto_save_threads:
+            _auto_save_threads[name]['stopped'] = True
+
+
+def get_auto_save_status(name):
+    with _auto_save_lock:
+        if name in _auto_save_threads and not _auto_save_threads[name]['stopped']:
+            info = _auto_save_threads[name]
+            return {
+                'success': True,
+                'enabled': True,
+                'interval': info['interval'],
+                'started_at': info['started_at']
+            }
+    return {'success': True, 'enabled': False}
+
+
+def set_auto_save_config(enabled=None, interval=None, save_dir=None):
+    if enabled is not None:
+        _auto_save_config['enabled'] = enabled
+    if interval is not None:
+        _auto_save_config['interval'] = int(interval)
+    if save_dir is not None:
+        _auto_save_config['save_dir'] = os.path.expanduser(save_dir)
+        os.makedirs(_auto_save_config['save_dir'], exist_ok=True)
+    return {'success': True, 'config': _auto_save_config.copy()}
+
+
+def get_auto_save_config():
+    return {'success': True, 'config': _auto_save_config.copy()}
 
 
 def get_screen_info(name):
@@ -280,6 +386,17 @@ class ScreenHandler(http.server.BaseHTTPRequestHandler):
                 name = path[6:]
                 self.send_json(get_screen_info(name))
             
+            elif path == '/auto-save/config':
+                self.send_json(get_auto_save_config())
+            
+            elif path.startswith('/auto-save/status/'):
+                name = path[17:]
+                self.send_json(get_auto_save_status(name))
+            
+            elif path.startswith('/save/'):
+                name = path[6:]
+                self.send_json(save_screen_log(name))
+            
             else:
                 self.send_json({'success': False, 'message': 'Unknown endpoint'}, 404)
         
@@ -308,6 +425,28 @@ class ScreenHandler(http.server.BaseHTTPRequestHandler):
             elif path.startswith('/stop/'):
                 name = path[6:]
                 self.send_json(stop_screen(name))
+            
+            elif path == '/auto-save/config':
+                data = json.loads(body) if body else {}
+                self.send_json(set_auto_save_config(
+                    enabled=data.get('enabled'),
+                    interval=data.get('interval'),
+                    save_dir=data.get('save_dir')
+                ))
+            
+            elif path.startswith('/auto-save/start/'):
+                name = path[17:]
+                data = json.loads(body) if body else {}
+                interval = data.get('interval')
+                self.send_json(start_auto_save(name, interval))
+            
+            elif path.startswith('/auto-save/stop/'):
+                name = path[16:]
+                self.send_json(stop_auto_save(name))
+            
+            elif path.startswith('/save/'):
+                name = path[6:]
+                self.send_json(save_screen_log(name))
             
             else:
                 self.send_json({'success': False, 'message': 'Unknown endpoint'}, 404)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Square, Terminal, RefreshCw, Plus, Send, Download } from "lucide-react";
+import { Square, Terminal, RefreshCw, Plus, Send, Download, Save, ToggleLeft, ToggleRight, Clock } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 
 interface ScreenSession {
@@ -20,6 +20,11 @@ export default function LocalScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
+  const [autoSaveInterval, setAutoSaveInterval] = useState(300);
+  const [autoSaveDir, setAutoSaveDir] = useState("~/screen_logs");
+  const [lastSaveTime, setLastSaveTime] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
 
   const MAX_LOG_LENGTH = 50000;
   const MAX_LOG_LINES = 2000;
@@ -56,9 +61,112 @@ export default function LocalScreen() {
     URL.revokeObjectURL(url);
   };
 
+  const saveLogToHost = async () => {
+    if (!selectedScreen) return;
+    try {
+      const response = await fetch(`/api/local-screen/save/${encodeURIComponent(selectedScreen)}`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLastSaveTime(new Date().toLocaleString());
+        alert(`日志已保存到宿主机: ${data.file}`);
+      } else {
+        alert(`保存失败: ${data.message}`);
+      }
+    } catch (err) {
+      alert("保存失败：网络错误");
+    }
+  };
+
+  const toggleAutoSave = async () => {
+    if (!selectedScreen) return;
+    if (autoSaveEnabled) {
+      try {
+        await fetch(`/api/local-screen/auto-save/stop/${encodeURIComponent(selectedScreen)}`, {
+          method: "POST",
+        });
+        setAutoSaveEnabled(false);
+      } catch (err) {
+        alert("操作失败");
+      }
+    } else {
+      try {
+        const response = await fetch(
+          `/api/local-screen/auto-save/start/${encodeURIComponent(selectedScreen)}?interval=${autoSaveInterval}`,
+          { method: "POST" }
+        );
+        const data = await response.json();
+        if (data.success) {
+          setAutoSaveEnabled(true);
+          setLastSaveTime(new Date().toLocaleString());
+        } else {
+          alert(`启动失败: ${data.message}`);
+        }
+      } catch (err) {
+        alert("启动失败：网络错误");
+      }
+    }
+  };
+
+  const loadAutoSaveStatus = async () => {
+    if (!selectedScreen) return;
+    try {
+      const response = await fetch(`/api/local-screen/auto-save/status/${encodeURIComponent(selectedScreen)}`);
+      const data = await response.json();
+      if (data.success) {
+        setAutoSaveEnabled(data.enabled || false);
+        if (data.interval) {
+          setAutoSaveInterval(data.interval);
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const loadAutoSaveConfig = async () => {
+    try {
+      const response = await fetch("/api/local-screen/auto-save/config");
+      const data = await response.json();
+      if (data.success && data.config) {
+        setAutoSaveInterval(data.config.interval || 300);
+        setAutoSaveDir(data.config.save_dir || "~/screen_logs");
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const saveAutoSaveConfig = async () => {
+    try {
+      const response = await fetch(
+        `/api/local-screen/auto-save/config?interval=${autoSaveInterval}&save_dir=${encodeURIComponent(autoSaveDir)}`,
+        { method: "POST" }
+      );
+      const data = await response.json();
+      if (data.success) {
+        alert("配置已保存");
+        setShowSettings(false);
+      } else {
+        alert(`保存失败: ${data.message}`);
+      }
+    } catch (err) {
+      alert("保存失败：网络错误");
+    }
+  };
+
+  useEffect(() => {
+    loadAutoSaveConfig();
+  }, []);
+
   useEffect(() => {
     if (selectedScreen) {
       connectWebSocket(selectedScreen);
+      loadAutoSaveStatus();
+    } else {
+      setAutoSaveEnabled(false);
+      setLastSaveTime("");
     }
     return () => {
       if (wsRef.current) {
@@ -343,6 +451,85 @@ export default function LocalScreen() {
                 {log || "等待数据..."}
                 <div ref={logEndRef} />
               </div>
+
+              <div className="p-3 border-t border-ink-700/60 bg-ink-900/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleAutoSave}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all ${
+                      autoSaveEnabled
+                        ? "bg-neon-green/20 text-neon-green"
+                        : "bg-ink-800/30 text-muted hover:bg-ink-800/50"
+                    }`}
+                    title={autoSaveEnabled ? "关闭定时保存" : "开启定时保存"}
+                  >
+                    {autoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                  </button>
+                  <span className={`text-xs ${autoSaveEnabled ? "text-neon-green" : "text-muted-dim"}`}>
+                    {autoSaveEnabled ? "定时保存已开启" : "定时保存已关闭"}
+                  </span>
+                  {lastSaveTime && (
+                    <span className="text-xs text-muted-dim ml-2">
+                      上次保存: {lastSaveTime}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveLogToHost}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-ink-800/30 text-muted hover:bg-ink-800/50 transition-all"
+                    title="保存到宿主机"
+                  >
+                    <Save size={14} />
+                    保存到宿主机
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} className="text-muted-dim" />
+                    <input
+                      type="number"
+                      value={autoSaveInterval}
+                      onChange={(e) => {
+                        const val = Math.max(10, parseInt(e.target.value) || 300);
+                        setAutoSaveInterval(val);
+                      }}
+                      className="w-16 px-2 py-1 bg-ink-800/50 border border-ink-700/50 rounded text-xs font-mono text-gray-200 focus:outline-none focus:border-neon-cyan/50"
+                      min={10}
+                    />
+                    <span className="text-xs text-muted-dim">秒</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="p-1.5 rounded-lg text-muted hover:text-white transition-colors"
+                    title="保存设置"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {showSettings && (
+                <div className="p-3 border-t border-ink-700/60 bg-ink-800/30">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-dim whitespace-nowrap">保存路径:</span>
+                    <input
+                      type="text"
+                      value={autoSaveDir}
+                      onChange={(e) => setAutoSaveDir(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-ink-900/50 border border-ink-700/50 rounded text-xs font-mono text-gray-200 focus:outline-none focus:border-neon-cyan/50"
+                      placeholder="~/screen_logs"
+                    />
+                    <button
+                      onClick={saveAutoSaveConfig}
+                      className="px-3 py-1.5 bg-neon-cyan/20 text-neon-cyan rounded text-xs hover:bg-neon-cyan/30 transition-colors"
+                    >
+                      保存配置
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="p-4 border-t border-ink-700/60">
                 <div className="flex gap-2">

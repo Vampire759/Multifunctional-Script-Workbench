@@ -99,6 +99,50 @@ async def stop_local_screen(name: str):
     return await _call_host_agent("POST", f"/stop/{name}")
 
 
+@router.post("/save/{name}", response_model=dict)
+async def save_local_screen_log(name: str):
+    """手动保存宿主机上指定 screen 会话的日志到宿主机本地"""
+    return await _call_host_agent("POST", f"/save/{name}")
+
+
+@router.get("/auto-save/config", response_model=dict)
+async def get_local_auto_save_config():
+    """获取宿主机定时保存配置"""
+    return await _call_host_agent("GET", "/auto-save/config")
+
+
+@router.post("/auto-save/config", response_model=dict)
+async def set_local_auto_save_config(
+    enabled: bool = None,
+    interval: int = None,
+    save_dir: str = None
+):
+    """设置宿主机定时保存配置"""
+    return await _call_host_agent("POST", "/auto-save/config", json={
+        "enabled": enabled,
+        "interval": interval,
+        "save_dir": save_dir
+    })
+
+
+@router.get("/auto-save/status/{name}", response_model=dict)
+async def get_local_auto_save_status(name: str):
+    """获取指定会话的定时保存状态"""
+    return await _call_host_agent("GET", f"/auto-save/status/{name}")
+
+
+@router.post("/auto-save/start/{name}", response_model=dict)
+async def start_local_auto_save(name: str, interval: int = None):
+    """为指定会话启动定时保存"""
+    return await _call_host_agent("POST", f"/auto-save/start/{name}", json={"interval": interval})
+
+
+@router.post("/auto-save/stop/{name}", response_model=dict)
+async def stop_local_auto_save(name: str):
+    """为指定会话停止定时保存"""
+    return await _call_host_agent("POST", f"/auto-save/stop/{name}")
+
+
 @router.websocket("/ws/{name}")
 async def local_screen_ws(ws: WebSocket, name: str):
     """WebSocket 实时日志推送 + 命令输入（宿主机 screen），同时保存日志到日志中心"""
