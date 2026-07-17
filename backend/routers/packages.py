@@ -5,8 +5,10 @@ from backend.schemas import GenericResp
 import os
 import subprocess
 import sys
+import re
+from importlib.metadata import distributions, PackageNotFoundError
 
-router = APIRouter(prefix="/packages", tags=["packages"])
+router = APIRouter(prefix="/api/packages", tags=["packages"])
 
 REQUIREMENTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "requirements.txt")
 
@@ -25,18 +27,28 @@ def write_requirements(packages: list):
         f.write("\n".join(packages))
         f.write("\n")
 
+def get_installed_packages() -> dict:
+    installed = {}
+    for dist in distributions():
+        name = dist.metadata["Name"].lower()
+        installed[name] = dist.version
+    return installed
+
+def parse_package_name(pkg_spec: str) -> str:
+    name = re.split(r'[<>=!~]', pkg_spec)[0].strip()
+    name = name.split("[")[0].strip()
+    return name.lower()
+
 @router.get("/", response_model=dict)
 async def get_packages():
     packages = read_requirements()
-    installed = []
+    installed_pkgs = get_installed_packages()
+    result = []
     for pkg in packages:
-        pkg_name = pkg.split("==")[0].split(">=")[0].split("<=")[0].strip()
-        try:
-            __import__(pkg_name.replace("-", "_"))
-            installed.append({"name": pkg, "installed": True})
-        except ImportError:
-            installed.append({"name": pkg, "installed": False})
-    return {"packages": installed}
+        pkg_name = parse_package_name(pkg)
+        is_installed = pkg_name in installed_pkgs
+        result.append({"name": pkg, "installed": is_installed})
+    return {"packages": result}
 
 @router.post("/", response_model=GenericResp)
 async def update_packages(packages: list[str]):
@@ -57,8 +69,8 @@ async def install_package(package: str):
         )
         if result.returncode == 0:
             packages = read_requirements()
-            pkg_name = package.split("==")[0].split(">=")[0].split("<=")[0].strip()
-            exists = any(pkg.split("==")[0].split(">=")[0].split("<=")[0].strip() == pkg_name for pkg in packages)
+            pkg_base = parse_package_name(package)
+            exists = any(parse_package_name(pkg) == pkg_base for pkg in packages)
             if not exists:
                 packages.append(package)
                 write_requirements(packages)
@@ -93,9 +105,9 @@ async def remove_package(package_name: str):
     try:
         packages = read_requirements()
         new_packages = []
+        target = parse_package_name(package_name)
         for pkg in packages:
-            pkg_base = pkg.split("==")[0].split(">=")[0].split("<=")[0].strip()
-            if pkg_base != package_name:
+            if parse_package_name(pkg) != target:
                 new_packages.append(pkg)
         if len(new_packages) == len(packages):
             raise HTTPException(status_code=404, detail="包不存在")

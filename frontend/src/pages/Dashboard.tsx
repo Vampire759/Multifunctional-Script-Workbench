@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Activity, Terminal, Play, Square, Clock, RefreshCw } from "lucide-react";
+import { Activity, Terminal, Clock, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
-import { listScripts, listScreens, executeScript, type Script, type ScreenTask } from "../lib/api";
-import { useNavigate } from "react-router-dom";
+import { listScreens, type ScreenTask } from "../lib/api";
 
 interface LogLine {
   text: string;
@@ -15,10 +14,7 @@ interface LogLine {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const [scripts, setScripts] = useState<Script[]>([]);
   const [screens, setScreens] = useState<ScreenTask[]>([]);
-  const [selectedScript, setSelectedScript] = useState<Script | null>(null);
   const [selectedScreen, setSelectedScreen] = useState<ScreenTask | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [currentProgress, setCurrentProgress] = useState<number | null>(null);
@@ -109,6 +105,10 @@ export default function Dashboard() {
       const ws = new WebSocket(`${proto}://${window.location.host}/api/screen/ws/${selectedScreen.name}`);
       wsRef.current = ws;
 
+      ws.onopen = () => {
+        setLogs([{ text: `[会话已连接] ${selectedScreen!.name}`, ts: Date.now(), level: "info" }]);
+      };
+
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
@@ -128,6 +128,14 @@ export default function Dashboard() {
         }
       };
 
+      ws.onerror = () => {
+        setLogs((prev) => [...prev, { text: "[错误] WebSocket 连接异常", ts: Date.now(), level: "error" }]);
+      };
+
+      ws.onclose = () => {
+        setLogs((prev) => [...prev, { text: "[会话已断开]", ts: Date.now(), level: "warning" }]);
+      };
+
       return () => {
         ws.close();
         wsRef.current = null;
@@ -145,39 +153,6 @@ export default function Dashboard() {
       }
     }
   }, [selectedScreen?.name]);
-
-  const loadScripts = async () => {
-    try {
-      const data = await listScripts();
-      setScripts(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setScripts([]);
-    }
-  };
-
-  useEffect(() => {
-    loadScripts();
-  }, []);
-
-  const handleExecute = async (script: Script) => {
-    try {
-      const result = await executeScript(script.id);
-      setSelectedScript(script);
-      await loadScreens();
-      const sessionName = result?.session_name || `script_${script.name}`;
-      const screens = await listScreens();
-      const target = screens.find((s) => s.name === sessionName);
-      if (target) {
-        setSelectedScreen(target);
-      } else if (screens.length > 0) {
-        const latest = screens.find((s) => s.name.startsWith("script_"));
-        if (latest) setSelectedScreen(latest);
-      }
-    } catch (e: any) {
-      alert(e?.response?.data?.detail || "执行失败");
-    }
-  };
 
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -220,17 +195,12 @@ export default function Dashboard() {
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
         title="任务台"
-        subtitle="选中脚本执行并查看实时监控"
+        subtitle="查看运行中的任务和实时日志"
         icon={<Activity size={20} />}
         actions={
-          <>
-            <button onClick={loadScripts} className="btn-ghost flex items-center gap-1">
-              <RefreshCw size={14} /> 刷新脚本
-            </button>
-            <button onClick={() => navigate("/scripts")} className="btn-amber flex items-center gap-2">
-              <Terminal size={14} /> 脚本管理
-            </button>
-          </>
+          <button onClick={loadScreens} className="btn-ghost flex items-center gap-1">
+            <RefreshCw size={14} /> 刷新
+          </button>
         }
       />
 
@@ -238,37 +208,38 @@ export default function Dashboard() {
         <div className="lg:col-span-1">
           <div className="glass-card">
             <div className="p-4 border-b border-ink-700/60">
-              <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">脚本列表</h3>
+              <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">任务列表</h3>
             </div>
             <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
-              {scripts.length === 0 && (
+              {screens.length === 0 && (
                 <div className="p-8 text-center text-muted-dim font-mono">
-                  暂无脚本
-                  <p className="text-xs mt-2">前往「脚本管理」创建或上传</p>
+                  暂无任务
+                  <p className="text-xs mt-2">任务将在这里显示</p>
                 </div>
               )}
-              {scripts.map((script) => (
+              {screens.map((screen) => (
                 <motion.div
-                  key={script.id}
+                  key={screen.name}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className={`p-4 border-b border-ink-800/40 ${
-                    selectedScript?.id === script.id ? "bg-ink-800/40" : "hover:bg-ink-800/30"
+                  onClick={() => setSelectedScreen(screen)}
+                  className={`p-4 border-b border-ink-800/40 cursor-pointer ${
+                    selectedScreen?.name === screen.name ? "bg-ink-800/40" : "hover:bg-ink-800/30"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-sm text-gray-100">{script.name}</span>
-                    <span className={`text-xs font-mono ${script.status === "active" ? "text-neon-cyan" : "text-muted-dim"}`}>
-                      {script.status === "active" ? "可用" : "草稿"}
+                    <span className="font-mono text-sm text-gray-100">{screen.name}</span>
+                    <span className={`text-xs font-mono ${statusColor(screen.status)}`}>
+                      {statusText(screen.status)}
                     </span>
                   </div>
-                  <div className="text-xs text-muted-dim truncate">{script.filename}</div>
-                  <button
-                    onClick={() => handleExecute(script)}
-                    className="mt-2 w-full py-1.5 bg-neon-cyan/10 text-neon-cyan rounded text-xs font-mono hover:bg-neon-cyan/20 transition-colors"
-                  >
-                    <Play size={12} className="inline mr-1" /> 执行脚本
-                  </button>
+                  <div className="text-xs text-muted-dim truncate">{screen.command || "-"}</div>
+                  {screen.started_at && (
+                    <div className="text-xs text-muted-dim mt-2 flex items-center gap-1">
+                      <Clock size={12} />
+                      {formatDuration(Math.floor((new Date().getTime() - new Date(screen.started_at).getTime()) / 1000))}
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>
@@ -343,7 +314,12 @@ export default function Dashboard() {
                   onScroll={handleScroll}
                 >
                   {logs.length === 0 && (
-                    <div className="text-center text-muted-dim py-8">等待日志...</div>
+                    <div className="text-center text-muted-dim py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <RefreshCw size={16} className="animate-spin" />
+                        连接中...
+                      </div>
+                    </div>
                   )}
                   {logs.map((log, idx) => (
                     <div key={idx} className={`break-all leading-relaxed ${
@@ -358,7 +334,7 @@ export default function Dashboard() {
             ) : (
               <div className="glass-card h-full flex flex-col">
                 <div className="p-4 border-b border-ink-700/60">
-                  <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">运行中的任务</h3>
+                  <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">实时日志</h3>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto">
                   {scriptScreens.length === 0 && (
@@ -366,7 +342,7 @@ export default function Dashboard() {
                       <div>
                         <Activity size={48} className="text-muted-dim mx-auto mb-3" />
                         <p className="text-muted-dim font-mono">暂无运行中的任务</p>
-                        <p className="text-xs text-muted-dim mt-2">从左侧选择脚本开始执行</p>
+                        <p className="text-xs text-muted-dim mt-2">从左侧选择任务查看日志</p>
                       </div>
                     </div>
                   )}

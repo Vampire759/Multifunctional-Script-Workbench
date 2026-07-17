@@ -62,7 +62,27 @@ async def list_screens() -> List[Dict]:
     screens = []
     
     try:
-        if os.path.exists(SCREEN_SOCK_DIR):
+        output = await _run_command(["screen", "-list"])
+        lines = output.strip().split("\n")
+        for line in lines:
+            if "No Sockets" in line or "Sockets in" in line or "Remove dead" in line:
+                continue
+            line_clean = line.replace("\t", " ").strip()
+            m = re.match(r"(\d+)\.(\S+)\s+\([^)]+\)\s+\(([^)]+)\)", line_clean)
+            if m:
+                status = m.group(3)
+                if "Dead" in status:
+                    continue
+                screens.append({
+                    "pid": m.group(1),
+                    "name": m.group(2),
+                    "status": status,
+                })
+    except Exception as e:
+        logger.error(f"Error listing screens with screen -list: {e}")
+    
+    if not screens and os.path.exists(SCREEN_SOCK_DIR):
+        try:
             for sock_file in os.listdir(SCREEN_SOCK_DIR):
                 if sock_file.endswith(".socket") or sock_file.startswith("screen."):
                     continue
@@ -71,36 +91,24 @@ async def list_screens() -> List[Dict]:
                     if len(parts) >= 2:
                         pid = parts[0]
                         name = ".".join(parts[1:])
-                        screens.append({
-                            "pid": pid,
-                            "name": name,
-                            "status": "running",
-                        })
+                        try:
+                            os.kill(int(pid), 0)
+                            screens.append({
+                                "pid": pid,
+                                "name": name,
+                                "status": "running",
+                            })
+                        except (OSError, ValueError):
+                            sock_path = os.path.join(SCREEN_SOCK_DIR, sock_file)
+                            try:
+                                os.remove(sock_path)
+                                logger.info(f"Removed dead screen socket: {sock_file}")
+                            except OSError:
+                                pass
                 except Exception:
                     pass
-    except Exception as e:
-        logger.error(f"Error listing screens from socket dir {SCREEN_SOCK_DIR}: {e}")
-    
-    if not screens:
-        try:
-            output = await _run_command(["screen", "-list"])
-            lines = output.strip().split("\n")
-            for line in lines:
-                if "No Sockets" in line or "Sockets in" in line or "Remove dead" in line:
-                    continue
-                line_clean = line.replace("\t", " ").strip()
-                m = re.match(r"(\d+)\.(\S+)\s+\([^)]+\)\s+\(([^)]+)\)", line_clean)
-                if m:
-                    status = m.group(3)
-                    if "Dead" in status:
-                        continue
-                    screens.append({
-                        "pid": m.group(1),
-                        "name": m.group(2),
-                        "status": status,
-                    })
         except Exception as e:
-            logger.error(f"Error listing screens with screen -list: {e}")
+            logger.error(f"Error listing screens from socket dir {SCREEN_SOCK_DIR}: {e}")
     
     return screens
 
@@ -152,8 +160,9 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
 
                 screen_cmd = [
                     "screen", "-dmS", session_name,
-                    "script", "-f", "-q", log_path,
-                    "-c", "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i"
+                    "script", "-f", "-q", "-c",
+                    "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i",
+                    log_path
                 ]
                 
                 proc = await asyncio.create_subprocess_exec(
@@ -203,6 +212,14 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 ])
         
         await asyncio.sleep(1)
+        
+        init_log_content = f"""[SESSION INIT] {session_name}
+[TIME] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+[STATUS] 会话已创建，等待命令执行...
+
+"""
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(init_log_content)
         
         if session_name not in _active_broadcasters or _active_broadcasters[session_name].done():
             _active_broadcasters[session_name] = asyncio.create_task(_broadcast_log(session_name, log_path))

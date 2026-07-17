@@ -190,6 +190,29 @@ async def delete_screen_task(name: str, db: Session = Depends(get_db)):
 async def screen_ws(ws: WebSocket, name: str):
     """WebSocket 实时日志推送 + 命令输入"""
     await hub.connect(f"screen_{name}", ws)
+    
+    from backend.services.screen_service import _active_broadcasters, _broadcast_log, get_session_log_path, _clean_log_content
+    
+    log_path = get_session_log_path(name)
+    
+    if name not in _active_broadcasters or _active_broadcasters[name].done():
+        _active_broadcasters[name] = asyncio.create_task(_broadcast_log(name, log_path))
+    
+    try:
+        if os.path.exists(log_path):
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+                for line in lines[-200:]:
+                    line = line.strip()
+                    if line:
+                        cleaned = _clean_log_content(line)
+                        await ws.send_text(json.dumps({
+                            "type": "log",
+                            "payload": {"log_line": cleaned}
+                        }, ensure_ascii=False))
+    except Exception as e:
+        pass
+    
     try:
         while True:
             data = await ws.receive_text()
