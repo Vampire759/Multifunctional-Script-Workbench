@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Activity, Terminal, Clock, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Activity, Terminal, Clock, RefreshCw, Save, ToggleLeft, ToggleRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
 import { listScreens, type ScreenTask } from "../lib/api";
@@ -21,10 +21,14 @@ export default function Dashboard() {
   const [progressMessage, setProgressMessage] = useState("");
   const [runningDuration, setRunningDuration] = useState(0);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
+  const [autoSaveInterval, setAutoSaveInterval] = useState(300);
+  const [lastSaveTime, setLastSaveTime] = useState("");
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
 
   const MAX_LOG_LINES = 2000;
 
@@ -62,6 +66,35 @@ export default function Dashboard() {
       }
     }
     return { text: line, ts: Date.now() };
+  };
+
+  const saveLogs = useCallback(() => {
+    if (!selectedScreen || logs.length === 0) return;
+    const logText = logs.map((l) => l.text).join("\n");
+    const blob = new Blob([logText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    a.download = `${selectedScreen.name}_${ts}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setLastSaveTime(new Date().toLocaleString());
+  }, [selectedScreen, logs]);
+
+  const toggleAutoSave = () => {
+    if (autoSaveEnabled) {
+      if (saveTimerRef.current) {
+        clearInterval(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    } else {
+      saveLogs();
+      saveTimerRef.current = window.setInterval(saveLogs, autoSaveInterval * 1000);
+    }
+    setAutoSaveEnabled(!autoSaveEnabled);
   };
 
   const loadScreens = async () => {
@@ -142,6 +175,11 @@ export default function Dashboard() {
         if (timerRef.current) {
           clearInterval(timerRef.current);
         }
+        if (saveTimerRef.current) {
+          clearInterval(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        setAutoSaveEnabled(false);
       };
     } else {
       if (wsRef.current) {
@@ -151,6 +189,11 @@ export default function Dashboard() {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      if (saveTimerRef.current) {
+        clearInterval(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      setAutoSaveEnabled(false);
     }
   }, [selectedScreen?.name]);
 
@@ -329,6 +372,57 @@ export default function Dashboard() {
                     </div>
                   ))}
                   <div ref={logsEndRef} />
+                </div>
+                <div className="p-3 border-t border-ink-700/60 flex items-center justify-between bg-ink-900/50">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={toggleAutoSave}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all ${
+                        autoSaveEnabled
+                          ? "bg-neon-green/20 text-neon-green"
+                          : "bg-ink-800/30 text-muted hover:bg-ink-800/50"
+                      }`}
+                      title={autoSaveEnabled ? "关闭定时保存" : "开启定时保存"}
+                    >
+                      {autoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                    </button>
+                    <span className={`text-xs ${autoSaveEnabled ? "text-neon-green" : "text-muted-dim"}`}>
+                      {autoSaveEnabled ? "定时保存已开启" : "定时保存已关闭"}
+                    </span>
+                    {lastSaveTime && (
+                      <span className="text-xs text-muted-dim ml-2">
+                        上次保存: {lastSaveTime}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={saveLogs}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-ink-800/30 text-muted hover:bg-ink-800/50 transition-all"
+                      title="保存日志"
+                    >
+                      <Save size={14} />
+                      保存日志
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-muted-dim" />
+                      <input
+                        type="number"
+                        value={autoSaveInterval}
+                        onChange={(e) => {
+                          const val = Math.max(10, parseInt(e.target.value) || 300);
+                          setAutoSaveInterval(val);
+                          if (autoSaveEnabled && saveTimerRef.current) {
+                            clearInterval(saveTimerRef.current);
+                            saveTimerRef.current = window.setInterval(saveLogs, val * 1000);
+                          }
+                        }}
+                        className="w-16 px-2 py-1 bg-ink-800/50 border border-ink-700/50 rounded text-xs font-mono text-gray-200 focus:outline-none focus:border-neon-cyan/50"
+                        min={10}
+                      />
+                      <span className="text-xs text-muted-dim">秒</span>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             ) : (

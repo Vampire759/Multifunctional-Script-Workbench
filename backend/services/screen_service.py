@@ -117,8 +117,16 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
     screens = await list_screens()
     existing_screen = any(s["name"] == session_name for s in screens)
     if existing_screen:
-        await stop_screen(session_name)
-        await asyncio.sleep(1)
+        logger.info(f"Session {session_name} already exists, reusing existing session")
+        task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
+        if task:
+            task.status = "running"
+            task.started_at = datetime.utcnow()
+            db.commit()
+        log_path = get_session_log_path(session_name)
+        if session_name not in _active_broadcasters or _active_broadcasters[session_name].done():
+            _active_broadcasters[session_name] = asyncio.create_task(_broadcast_log(session_name, log_path))
+        return True
     
     log_path = get_screen_log_path(session_name)
     
@@ -152,56 +160,73 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
             
             asyncio.create_task(_monitor_windows_process(session_name, proc, db))
         else:
-            try:
-                env = os.environ.copy()
-                env['TERM'] = 'xterm-256color'
-                env['LANG'] = 'C.UTF-8'
-                env['LC_ALL'] = 'C.UTF-8'
+            max_retries = 2
+            session_created = False
+            last_error = ""
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    env = os.environ.copy()
+                    env['TERM'] = 'xterm-256color'
+                    env['LANG'] = 'C.UTF-8'
+                    env['LC_ALL'] = 'C.UTF-8'
+                    env['SCREENDIR'] = SCREEN_SOCK_DIR
 
-                screen_cmd = [
-                    "screen", "-dmS", session_name,
-                    "script", "-f", "-q", "-c",
-                    "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i",
-                    log_path
-                ]
-                
-                proc = await asyncio.create_subprocess_exec(
-                    *screen_cmd,
-                    env=env,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-                
-                stdout_str = stdout.decode("utf-8", errors="replace")
-                stderr_str = stderr.decode("utf-8", errors="replace")
-                
-                logger.info(f"Screen process exited with code: {proc.returncode}")
-                if stdout_str:
-                    logger.info(f"Screen stdout: {stdout_str}")
-                if stderr_str:
-                    logger.info(f"Screen stderr: {stderr_str}")
-                
-                await asyncio.sleep(1)
-                
-                screens = await list_screens()
-                session_found = any(s["name"] == session_name for s in screens)
-                
-                if not session_found:
-                    task.status = "failed"
-                    task.error = f"Screen session not found after creation. Exit code: {proc.returncode}, stderr: {stderr_str}"
-                    db.commit()
-                    return False
-                
-                logger.info(f"Screen session created successfully: {session_name}, log_path: {log_path}")
-            except Exception as e:
-                import traceback
-                error_details = traceback.format_exc()
-                logger.error(f"Error creating screen session: {error_details}")
+                    screen_cmd = [
+                        "screen", "-dmS", session_name,
+                        "script", "-f", "-q", "-c",
+                        "LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/bash -i",
+                        log_path
+                    ]
+                    
+                    proc = await asyncio.create_subprocess_exec(
+                        *screen_cmd,
+                        env=env,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await proc.communicate()
+                    
+                    stdout_str = stdout.decode("utf-8", errors="replace")
+                    stderr_str = stderr.decode("utf-8", errors="replace")
+                    
+                    logger.info(f"Screen create attempt {attempt + 1}, exit code: {proc.returncode}")
+                    if stderr_str:
+                        logger.info(f"Screen stderr: {stderr_str}")
+                    
+                    await asyncio.sleep(2)
+                    
+                    screens = await list_screens()
+                    session_found = any(s["name"] == session_name for s in screens)
+                    
+                    if session_found:
+                        session_created = True
+                        logger.info(f"Screen session created successfully: {session_name}")
+                        break
+                    else:
+                        last_error = f"Exit code: {proc.returncode}, stderr: {stderr_str}"
+                        logger.warning(f"Session not found after attempt {attempt + 1}: {last_error}")
+                        if attempt < max_retries:
+                            await asyncio.sleep(1)
+                except Exception as e:
+                    last_error = str(e)
+                    logger.warning(f"Create attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(1)
+            
+            if not session_created:
                 task.status = "failed"
-                task.error = f"Exception: {str(e)}"
+                task.error = f"Failed to create screen session after {max_retries + 1} attempts. Last error: {last_error}"
                 db.commit()
                 return False
+            
+            init_msg = f"echo '[SESSION INIT] {session_name}' && echo '[TIME] {datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}' && echo '[STATUS] 会话已创建，等待命令执行...'\n"
+            await _run_command([
+                "screen", "-S", session_name, "-X", "stuff",
+                init_msg
+            ])
+            
+            await asyncio.sleep(0.5)
             
             if command.strip():
                 escaped_cmd = command.replace("'", "'\\''")
@@ -212,14 +237,6 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                 ])
         
         await asyncio.sleep(1)
-        
-        init_log_content = f"""[SESSION INIT] {session_name}
-[TIME] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-[STATUS] 会话已创建，等待命令执行...
-
-"""
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(init_log_content)
         
         if session_name not in _active_broadcasters or _active_broadcasters[session_name].done():
             _active_broadcasters[session_name] = asyncio.create_task(_broadcast_log(session_name, log_path))
