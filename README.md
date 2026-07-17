@@ -64,8 +64,28 @@
 ### 📝 脚本管理
 - 上传和管理 Python 脚本
 - 在线执行脚本
-- 自动安装脚本依赖（requests, beautifulsoup4 等）
+- **自动安装脚本依赖**（详见下方说明）
 - 脚本执行历史记录
+
+#### ✨ 自动安装 Python 依赖
+
+执行脚本时，系统会自动扫描脚本中的 `import` 语句，并智能识别和安装缺失的第三方依赖：
+
+- **标准库识别**：内置 200+ Python 标准库白名单（os, sys, json, re 等），自动跳过
+- **包名映射**：常见模块名自动映射到 pip 包名，例如：
+  - `bs4` → `beautifulsoup4`
+  - `PIL` → `Pillow`
+  - `cv2` → `opencv-python`
+  - `yaml` → `PyYAML`
+  - `sklearn` → `scikit-learn`
+  - `dateutil` → `python-dateutil`
+  - `dotenv` → `python-dotenv`
+  - `jwt` → `PyJWT`
+- **已安装跳过**：已安装的包不会重复安装
+- **批量安装**：缺失依赖一次性批量安装，超时保护 120 秒
+- **执行反馈**：返回实际安装的依赖列表，前端显示安装结果
+
+> 💡 你也可以在脚本中使用 `try/except ImportError` 配合 `os.system("pip install xxx")` 的方式实现运行时自动安装。
 
 ### 🖥️ 本地 Screen 监控
 - 监控宿主机上的 Screen 会话
@@ -156,16 +176,31 @@
 - **Docker Compose** >= 2.0
 - **Git**（可选，用于克隆代码）
 
-### 一键启动
+### 一键启动（裸环境零依赖部署）
+
+> 🎯 **零依赖部署**：即使你的服务器什么都没装（没有 Docker、没有 Git、没有 curl），只要能联网，运行下面这一条命令即可完成全部部署！
 
 ```bash
-# 克隆项目
+# 克隆项目（如果没有 git，脚本会自动安装）
 git clone <your-repo-url>
 cd workbench
 
-# 启动服务
-docker compose up -d --build
+# 赋予执行权限并运行智能部署脚本
+chmod +x deploy_smart.sh
+./deploy_smart.sh
 ```
+
+`deploy_smart.sh` 会自动完成以下工作：
+1. **检测操作系统**（Ubuntu/Debian/CentOS/RHEL/Fedora/Rocky/AlmaLinux）
+2. **检查并安装 curl**（如果缺失）
+3. **检查并安装 Git**（如果缺失）
+4. **检查并安装 Docker**（如果缺失，从官方源安装）
+5. **检查并安装 Docker Compose**（如果缺失，安装 v2 插件或独立版本）
+6. **准备目录结构**（data/ logs/ scripts/ downloads/）
+7. **构建镜像并启动服务**
+8. **验证服务健康状态**
+
+> 💡 脚本采用「**有的环境跳过，没有的环境安装**」策略，重复运行也安全。需要 sudo 权限来安装系统级依赖。
 
 服务启动后，访问 [http://localhost:3000](http://localhost:3000) 即可使用。
 
@@ -185,7 +220,18 @@ docker compose up -d --build
 
 Docker 部署是最简单、最快速的方式，所有依赖都已打包在镜像中。
 
-#### 1. 准备工作
+#### 方式 A：智能部署脚本（推荐，适合裸环境）
+
+```bash
+chmod +x deploy_smart.sh
+./deploy_smart.sh
+```
+
+脚本会自动检测并安装所有缺失的依赖（Docker、Docker Compose、Git、curl），然后构建并启动服务。详见上文 [一键启动](#一键启动裸环境零依赖部署)。
+
+#### 方式 B：手动 Docker 部署（已有 Docker 环境）
+
+##### 1. 准备工作
 
 确保已安装 Docker 和 Docker Compose：
 
@@ -194,16 +240,16 @@ docker --version
 docker compose version
 ```
 
-如果没有安装，请参考 [Docker 官方文档](https://docs.docker.com/get-docker/) 进行安装。
+如果没有安装，请参考 [Docker 官方文档](https://docs.docker.com/get-docker/) 进行安装，或直接使用本项目的 `deploy_smart.sh` 自动安装。
 
-#### 2. 获取代码
+##### 2. 获取代码
 
 ```bash
 git clone <your-repo-url>
 cd workbench
 ```
 
-#### 3. 配置环境变量（可选）
+##### 3. 配置环境变量（可选）
 
 编辑 `docker-compose.yml` 文件，修改以下环境变量：
 
@@ -214,7 +260,7 @@ environment:
   - LOG_LEVEL=info                          # 日志级别: debug, info, warning, error
 ```
 
-#### 4. 启动服务
+##### 4. 启动服务
 
 ```bash
 # 构建并启动
@@ -227,7 +273,7 @@ docker compose ps
 docker compose logs -f
 ```
 
-#### 5. 验证服务
+##### 5. 验证服务
 
 ```bash
 # 检查健康状态
@@ -236,7 +282,7 @@ curl http://localhost:3000/health
 # 返回示例: {"status":"ok"}
 ```
 
-#### 6. 停止服务
+##### 6. 停止服务
 
 ```bash
 # 停止服务
@@ -246,7 +292,7 @@ docker compose down
 docker compose down -v
 ```
 
-#### 7. 更新版本
+##### 7. 更新版本
 
 ```bash
 # 拉取最新代码
@@ -480,11 +526,13 @@ workbench/
 │   └── ...
 │
 ├── host_screen_agent.py       # 宿主机 Screen 代理（可选）
-├── Dockerfile                 # Docker 镜像构建文件
+├── Dockerfile                 # Docker 镜像构建文件（多阶段构建）
 ├── docker-compose.yml         # Docker Compose 配置
 ├── requirements.txt           # Python 依赖
 ├── .dockerignore              # Docker 忽略文件
+├── deploy_smart.sh            # 🌟 智能部署脚本（裸环境一键部署，自动安装 Docker/Git 等）
 ├── deploy.sh                  # Linux 部署脚本
+├── deploy_linux.sh            # Linux 部署脚本（备用）
 ├── deploy.bat                 # Windows 部署脚本
 └── README.md                  # 项目说明文档
 ```
