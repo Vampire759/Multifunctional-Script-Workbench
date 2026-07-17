@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+:root {
+  font-family: "Noto Sans SC", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #0A0E14;
+  color: #E5E7EB;
+  background-image:
+    linear-gradient(rgba(26, 31, 46, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 31, 46, 0.35) 1px, transparent 1px),
+    radial-gradient(circle at bottom right, rgba(0, 229, 255, 0.08), transparent 55%);
+  background-size: 40px 40px, 40px 40px, 100% 100%;
+  background-attachment: fixed;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0F141C;
+}
+::-webkit-scrollbar-thumb {
+  background: #252B3D;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3A4258;
+}
+
+@layer components {
+  /* 玻璃拟态卡片 */
+  .glass-card {
+    @apply bg-ink-900/70 backdrop-blur-md border border-ink-700/60 rounded-xl;
+  }
+
+  /* 霓虹按钮 */
+  .btn-neon {
+    @apply px-4 py-2 rounded-md border border-neon-cyan/50 text-neon-cyan
+           hover:border-neon-cyan hover:shadow-neon-cyan hover:bg-neon-cyan/5
+           transition-all duration-200 font-mono text-sm tracking-wide;
+  }
+  .btn-amber {
+    @apply px-4 py-2 rounded-md border border-neon-amber/50 text-neon-amber
+           hover:border-neon-amber hover:shadow-neon-amber hover:bg-neon-amber/5
+           transition-all duration-200 font-mono text-sm tracking-wide;
+  }
+  .btn-ghost {
+    @apply px-3 py-1.5 rounded-md text-muted hover:text-neon-cyan hover:bg-ink-800/60
+           transition-all duration-200 text-sm;
+  }
+  .btn-danger {
+    @apply px-4 py-2 rounded-md border border-neon-rose/50 text-neon-rose
+           hover:border-neon-rose hover:shadow-[0_0_12px_rgba(255,77,109,0.4)] hover:bg-neon-rose/5
+           transition-all duration-200 font-mono text-sm tracking-wide;
+  }
+
+  /* 输入框 */
+  .input-cyber {
+    @apply w-full bg-ink-950/80 border border-ink-700/60 rounded-md px-3 py-2
+           text-sm text-gray-100 placeholder:text-muted-dim
+           focus:outline-none focus:border-neon-cyan/70 focus:shadow-neon-cyan
+           transition-all duration-200 font-mono;
+  }
+
+  /* 状态指示灯 */
+  .dot {
+    @apply inline-block w-2 h-2 rounded-full;
+  }
+  .dot-running {
+    @apply bg-neon-cyan shadow-[0_0_8px_rgba(0,229,255,0.8)] animate-pulse-slow;
+  }
+  .dot-success {
+    @apply bg-neon-green shadow-[0_0_8px_rgba(16,245,160,0.8)];
+  }
+  .dot-failed {
+    @apply bg-neon-rose shadow-[0_0_8px_rgba(255,77,109,0.8)];
+  }
+  .dot-pending {
+    @apply bg-muted-dim;
+  }
+  .dot-enabled {
+    @apply bg-neon-green shadow-[0_0_8px_rgba(16,245,160,0.8)] animate-pulse-slow;
+  }
+  .dot-disabled {
+    @apply bg-muted-dim;
+  }
+}
+
+/* 终端日志字体 */
+.terminal-text {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
