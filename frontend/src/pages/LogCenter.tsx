@@ -266,14 +266,16 @@ export default function LogCenter() {
   };
 
   const statusColor = (status: string) => {
-    if (status.includes("running") || status.includes("detached")) return "text-neon-cyan";
-    if (status === "stopped") return "text-muted-dim";
+    const s = status.toLowerCase();
+    if (s.includes("running") || s.includes("detached")) return "text-neon-cyan";
+    if (s === "stopped") return "text-muted-dim";
     return "text-neon-rose";
   };
 
   const statusText = (status: string) => {
-    if (status.includes("running") || status.includes("detached")) return "运行中";
-    if (status === "stopped") return "已停止";
+    const s = status.toLowerCase();
+    if (s.includes("running") || s.includes("detached")) return "运行中";
+    if (s === "stopped") return "已停止";
     return "失败";
   };
 

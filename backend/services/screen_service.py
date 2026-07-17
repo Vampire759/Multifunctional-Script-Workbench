@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+from backend.database import SessionLocal
 from backend.models import ScreenTask
 from backend.services.websocket_hub import hub
 
@@ -315,6 +316,16 @@ async def _broadcast_log(session_name: str, log_path: str):
                                             "type": "log",
                                             "payload": {"log_line": stripped},
                                         })
+                except Exception:
+                    pass
+                try:
+                    db = SessionLocal()
+                    task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
+                    if task:
+                        task.status = "stopped"
+                        task.finished_at = datetime.utcnow()
+                        db.commit()
+                    db.close()
                 except Exception:
                     pass
                 await hub.broadcast(f"screen_{session_name}", {

@@ -28,14 +28,13 @@ async def create_screen_session(
     if not name:
         raise HTTPException(status_code=400, detail="name 必填")
     
-    exists = screen_service.get_screen_task(db, name)
-    if exists and exists.status == "running":
-        raise HTTPException(status_code=400, detail="会话已存在且正在运行")
-    
     try:
         success = await screen_service.create_screen(name, command, db)
         if success:
-            return GenericResp(success=True, message=f"Screen 会话 '{name}' 已创建")
+            task = screen_service.get_screen_task(db, name)
+            is_existing = task and task.created_at and (task.started_at and task.started_at == task.created_at or False)
+            msg = f"Screen 会话 '{name}' 已创建" if not task or not task.id or task.status == "running" else f"Screen 会话 '{name}' 已存在，正在复用"
+            return GenericResp(success=True, message=msg)
         
         task = screen_service.get_screen_task(db, name)
         error_msg = task.error if task else "未知错误"
@@ -112,19 +111,23 @@ async def list_screen_sessions(db: Session = Depends(get_db)):
     tasks = screen_service.get_screen_tasks(db)
     screens = await screen_service.list_screens()
     
-    task_map = {t.name: t for t in tasks}
+    screen_map = {s["name"]: s for s in screens}
     result = []
     
-    for screen in screens:
-        task = task_map.get(screen["name"])
-        if not task:
-            continue
+    for task in tasks:
+        screen = screen_map.get(task.name)
+        if screen:
+            status = screen["status"]
+            pid = screen.get("pid")
+        else:
+            status = task.status or "stopped"
+            pid = None
         result.append({
             "id": task.id,
-            "name": screen["name"],
+            "name": task.name,
             "command": task.command,
-            "status": screen["status"],
-            "pid": screen.get("pid"),
+            "status": status,
+            "pid": pid,
             "log_path": task.log_path,
             "error": task.error,
             "started_at": task.started_at.isoformat() if task.started_at else None,
@@ -132,6 +135,7 @@ async def list_screen_sessions(db: Session = Depends(get_db)):
             "created_at": task.created_at.isoformat() if task.created_at else None,
         })
     
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return result
 
 
@@ -141,10 +145,8 @@ async def get_screen_log(
     tail: int = Query(100),
     db: Session = Depends(get_db),
 ):
-    screens = await screen_service.list_screens()
-    screen_exists = any(s["name"] == name for s in screens)
-    
-    if not screen_exists:
+    task = screen_service.get_screen_task(db, name)
+    if not task:
         raise HTTPException(status_code=404, detail="会话不存在")
     
     log_content = await screen_service.get_screen_log(name, tail)
