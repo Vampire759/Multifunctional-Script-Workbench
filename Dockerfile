@@ -139,8 +139,8 @@ COPY host_screen_agent.py ./host_screen_agent.py
 RUN mkdir -p data logs scripts downloads /app/screen_sockets \
     && chmod 700 /app/screen_sockets
 
-# Screen 环境变量（必须指向自定义目录，避免系统默认目录权限问题）
-ENV SCREENDIR=/app/screen_sockets
+# Screen 环境变量（使用 /tmp/screen_sockets 确保权限正确）
+ENV SCREENDIR=/tmp/screen_sockets
 
 # ------------------------------------------------------------
 # 健康检查

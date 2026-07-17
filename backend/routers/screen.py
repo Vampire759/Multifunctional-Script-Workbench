@@ -51,18 +51,27 @@ async def test_screen():
     """测试screen命令是否正常工作"""
     try:
         import os
+        from backend.services.screen_service import SCREEN_SOCK_DIR
+        
         result = await screen_service._run_command(["screen", "-version"])
         logger.info(f"Screen version: {result}")
         
-        result2 = await screen_service._run_command(["ls", "-la", "/run/screen"])
-        logger.info(f"Screen dir: {result2}")
+        result2 = await screen_service._run_command(["ls", "-la", SCREEN_SOCK_DIR])
+        logger.info(f"Screen sock dir: {result2}")
+        
+        result3 = await screen_service._run_command(["ls", "-la", "/run/screen"])
+        logger.info(f"Screen dir: {result3}")
         
         env_check = os.environ.get('USER', 'unknown')
         logger.info(f"Current user: {env_check}")
         
         test_name = f"test_{os.getpid()}"
-        result3 = await screen_service._run_command(["screen", "-dmS", test_name, "/bin/bash", "-i"])
-        logger.info(f"Create screen result: {result3}")
+        
+        env = os.environ.copy()
+        env['SCREENDIR'] = SCREEN_SOCK_DIR
+        
+        result4 = await screen_service._run_command(["screen", "-dmS", test_name, "/bin/bash", "-i"], env=env)
+        logger.info(f"Create screen result: {result4}")
         
         await screen_service._run_command(["sleep", "1"])
         
@@ -71,7 +80,9 @@ async def test_screen():
         
         found = any(s["name"] == test_name for s in screens)
         
-        await screen_service._run_command(["screen", "-S", test_name, "-X", "quit"])
+        if found:
+            await screen_service._run_command(["screen", "-S", test_name, "-X", "quit"], env=env)
+            logger.info(f"Test screen session {test_name} cleaned up")
         
         return {
             "success": True,

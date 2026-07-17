@@ -19,10 +19,14 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-SCREEN_SOCK_DIR = "/app/screen_sockets"
+SCREEN_SOCK_DIR = "/tmp/screen_sockets"
 os.makedirs(SCREEN_SOCK_DIR, exist_ok=True)
-os.chmod(SCREEN_SOCK_DIR, 0o700)
+os.chmod(SCREEN_SOCK_DIR, 0o777)
 os.environ['SCREENDIR'] = SCREEN_SOCK_DIR
+
+logger.info(f"Screen socket directory: {SCREEN_SOCK_DIR}")
+logger.info(f"Screen socket directory exists: {os.path.exists(SCREEN_SOCK_DIR)}")
+logger.info(f"Screen socket directory permissions: {oct(os.stat(SCREEN_SOCK_DIR).st_mode)[-4:]}")
 
 IS_WINDOWS = platform.system() == "Windows"
 
@@ -183,6 +187,9 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                     logger.info(f"Creating screen session: {' '.join(screen_cmd)}")
                     logger.info(f"SCREENDIR: {SCREEN_SOCK_DIR}")
                     logger.info(f"Log path: {log_path}")
+                    logger.info(f"Current directory: {os.getcwd()}")
+                    logger.info(f"USER: {os.environ.get('USER', 'unknown')}")
+                    logger.info(f"HOME: {os.environ.get('HOME', 'unknown')}")
                     
                     proc = await asyncio.create_subprocess_exec(
                         *screen_cmd,
@@ -197,13 +204,17 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                     
                     logger.info(f"Screen create attempt {attempt + 1}, exit code: {proc.returncode}")
                     if stderr_str:
-                        logger.info(f"Screen stderr: {stderr_str}")
+                        logger.error(f"Screen stderr: {stderr_str}")
                     if stdout_str:
                         logger.info(f"Screen stdout: {stdout_str}")
                     
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(1)
+                    
+                    sock_files = os.listdir(SCREEN_SOCK_DIR) if os.path.exists(SCREEN_SOCK_DIR) else []
+                    logger.info(f"Sock files in {SCREEN_SOCK_DIR}: {sock_files}")
                     
                     screens = await list_screens()
+                    logger.info(f"Available screens after creation: {screens}")
                     session_found = any(s["name"] == session_name for s in screens)
                     
                     if session_found:
@@ -211,7 +222,7 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                         logger.info(f"Screen session created successfully: {session_name}")
                         break
                     else:
-                        last_error = f"Exit code: {proc.returncode}, stderr: {stderr_str}, stdout: {stdout_str}"
+                        last_error = f"Exit code: {proc.returncode}, stderr: {stderr_str}, stdout: {stdout_str}, sock_files: {sock_files}"
                         logger.warning(f"Session not found after attempt {attempt + 1}: {last_error}")
                         if attempt < max_retries:
                             await asyncio.sleep(1)
