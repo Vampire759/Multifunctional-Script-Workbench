@@ -141,11 +141,15 @@ async def retry_download(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{task_id}", response_model=GenericResp)
-def delete_download(task_id: int, db: Session = Depends(get_db)):
-    """删除下载任务"""
+async def delete_download(task_id: int, db: Session = Depends(get_db)):
+    """删除下载任务，同时停止对应的screen会话"""
     task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    
+    session_name = f"dl_task_{task_id}"
+    await screen_service.stop_screen(session_name)
+    
     db.delete(task)
     db.commit()
     return GenericResp(success=True, message="已删除")

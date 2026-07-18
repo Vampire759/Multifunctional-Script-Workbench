@@ -89,7 +89,7 @@ export default function Downloads() {
     if (selectedScriptId && websiteUrl) {
       const script = scripts.find((s) => s.id === selectedScriptId);
       if (script) {
-        setScriptFormat(`python ${script.filename} "${websiteUrl}"`);
+        setScriptFormat(`python scripts/${script.filename} "${websiteUrl}"`);
         setOutputFormat(`{
   "success": true,
   "data": [],

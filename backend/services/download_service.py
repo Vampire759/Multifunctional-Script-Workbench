@@ -206,7 +206,7 @@ async def execute_download(db: Session, task_id: int):
 
 
 async def _execute_script_via_screen(db: Session, task_id: int):
-    """通过screen执行脚本命令"""
+    """通过screen执行脚本命令，同时广播日志到下载任务和screen会话"""
     task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
     if not task or not task.command:
         return
@@ -224,9 +224,58 @@ async def _execute_script_via_screen(db: Session, task_id: int):
     if success:
         await _broadcast(task_id, {"type": "log", "payload": {"log_line": "[Screen] 脚本已启动，可以在任务台查看实时日志", "level": "success"}})
         await _update_task(db, task_id, {"status": "running"})
+        
+        asyncio.create_task(_mirror_screen_logs(task_id, session_name))
     else:
         await _update_task(db, task_id, {"status": "failed", "error": "脚本启动失败", "finished_at": datetime.utcnow()})
         await _broadcast(task_id, {"type": "error", "payload": {"error": "脚本启动失败"}})
+
+
+async def _mirror_screen_logs(task_id: int, session_name: str):
+    """将screen会话的日志镜像到下载任务的WebSocket"""
+    from backend.services.websocket_hub import hub
+    import asyncio
+    
+    while True:
+        try:
+            screens = await screen_service.list_screens()
+            screen_exists = any(s["name"] == session_name for s in screens)
+            if not screen_exists:
+                await _broadcast(task_id, {"type": "done", "payload": {"status": "exited"}})
+                break
+            
+            log_path = screen_service.get_session_log_path(session_name)
+            if not os.path.exists(log_path):
+                await asyncio.sleep(1)
+                continue
+            
+            file_size = os.path.getsize(log_path)
+            if file_size == 0:
+                await asyncio.sleep(1)
+                continue
+            
+            try:
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                    if content:
+                        lines = content.split("\n")
+                        last_lines = lines[-5:] if len(lines) > 5 else lines
+                        for line in last_lines:
+                            if line.strip():
+                                cleaned = _clean_log_content(line.strip())
+                                await _broadcast(task_id, {"type": "log", "payload": {"log_line": cleaned}})
+            except Exception:
+                pass
+            
+            await asyncio.sleep(2)
+        except Exception:
+            break
+
+
+def _clean_log_content(line: str) -> str:
+    """清理日志内容，移除控制字符"""
+    import re
+    return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', line).strip()
 
 
 def create_download_task(db: Session, video_url: str = "", source_url: str = "", title: str = "", filename: str = "", script_id: int | None = None, command: str = "") -> int:
