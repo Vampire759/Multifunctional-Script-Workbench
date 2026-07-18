@@ -218,9 +218,9 @@
 
 ```bash
 # 克隆项目（如果没有 git，脚本会自动安装）
-git clone <your-repo-url>
-cd workbench
-
+git clone https://github.com/Vampire759/Multifunctional-Script-Workbench.git
+cd Multifunctional-Script-Workbench
+```
 # 赋予执行权限并运行智能部署脚本
 chmod +x deploy_smart.sh
 ./deploy_smart.sh
@@ -281,8 +281,8 @@ docker compose version
 ##### 2. 获取代码
 
 ```bash
-git clone <your-repo-url>
-cd workbench
+git clone https://github.com/Vampire759/Multifunctional-Script-Workbench.git
+cd Multifunctional-Script-Workbench
 ```
 
 ##### 3. 配置环境变量（可选）
@@ -454,7 +454,7 @@ sudo systemctl start workbench-agent
 | `SECRET_KEY` | `change_me_to_a_random_string` | JWT 签名密钥，**生产环境必须修改** |
 | `API_KEY` | `your_api_key_here` | API 访问密钥 |
 | `LOG_LEVEL` | `info` | 日志级别：`debug`, `info`, `warning`, `error`, `critical` |
-| `SCREENDIR` | `/app/screen_sockets` | Screen 会话 socket 目录 |
+| `SCREENDIR` | `/tmp/screen_sockets` | Screen 会话 socket 目录（必须 700 权限） |
 | `PYTHONUNBUFFERED` | `1` | Python 输出不缓冲 |
 
 ### 端口说明
@@ -521,7 +521,7 @@ sudo systemctl start workbench-agent
 ## 目录结构
 
 ```
-workbench/
+Multifunctional-Script-Workbench/
 ├── backend/                    # 后端代码
 │   ├── main.py                # FastAPI 应用入口
 │   ├── config.py              # 配置文件
@@ -600,12 +600,17 @@ curl -X POST http://localhost:3000/api/auth/change-password \
    docker compose exec app screen --version
    ```
 
-2. 检查目录权限：
+2. 检查 SCREENDIR 目录权限（必须为 700）：
    ```bash
-   docker compose exec app ls -la /app/screen_sockets
+   docker compose exec app ls -la /tmp/screen_sockets
    ```
 
-3. 查看后端日志：
+3. 如果权限不是 700，手动修复：
+   ```bash
+   docker compose exec app chmod 700 /tmp/screen_sockets
+   ```
+
+4. 查看后端日志：
    ```bash
    docker compose logs app | grep -i error
    ```
@@ -663,9 +668,10 @@ docker compose up -d
 
 ### Q7: 日志文件在哪里？
 
-- **容器内 Screen 会话日志**: `logs/` 目录下
-- **宿主机 Screen 会话日志**: `logs/local_{session_name}/` 目录下
+- **容器内 Screen 会话日志**: `logs/{session_name}/` 目录下（按会话分组）
+- **宿主机 Screen 会话日志**: `logs/local_{session_name}/` 目录下（local_ 前缀标识）
 - **后端服务日志**: `docker compose logs app`
+- **历史日志查看**: 登录后进入「日志中心」→「历史日志」查看所有历史日志
 
 ---
 

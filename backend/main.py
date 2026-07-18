@@ -28,9 +28,10 @@ async def lifespan(app: FastAPI):
     import logging
     logging.basicConfig(level=logging.DEBUG)
     
-    from backend.services.screen_service import list_screens, _active_broadcasters, _broadcast_log, get_session_log_path
+    from backend.services.screen_service import list_screens, _active_broadcasters, _broadcast_log, get_session_log_path, start_health_check
     screens = await list_screens()
     print(f"[App] Found {len(screens)} screen sessions: {[s['name'] for s in screens]}")
+    start_health_check()
     for screen_info in screens:
         session_name = screen_info["name"]
         log_path = get_session_log_path(session_name)

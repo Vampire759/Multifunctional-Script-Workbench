@@ -21,7 +21,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 SCREEN_SOCK_DIR = "/tmp/screen_sockets"
 os.makedirs(SCREEN_SOCK_DIR, exist_ok=True)
-os.chmod(SCREEN_SOCK_DIR, 0o777)
+os.chmod(SCREEN_SOCK_DIR, 700)
 os.environ['SCREENDIR'] = SCREEN_SOCK_DIR
 
 logger.info(f"Screen socket directory: {SCREEN_SOCK_DIR}")
@@ -32,6 +32,7 @@ IS_WINDOWS = platform.system() == "Windows"
 
 _running_processes: Dict[str, asyncio.subprocess.Process] = {}
 _active_broadcasters: Dict[str, asyncio.Task] = {}
+_health_check_task: Optional[asyncio.Task] = None
 
 
 def get_screen_log_path(session_name: str) -> str:
@@ -179,9 +180,11 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
                     env['LC_ALL'] = 'C.UTF-8'
                     env['SCREENDIR'] = SCREEN_SOCK_DIR
 
+                    # 使用 bash 不带 -i 标志，避免在 detached 会话中因无交互输入而退出
+                    # screen 会自动分配伪终端
                     screen_cmd = [
                         "screen", "-dmS", session_name,
-                        "/bin/bash", "-i"
+                        "/bin/bash"
                     ]
                     
                     logger.info(f"Creating screen session: {' '.join(screen_cmd)}")
@@ -445,3 +448,39 @@ def get_screen_tasks(db: Session) -> List[ScreenTask]:
 
 def get_screen_task(db: Session, name: str) -> Optional[ScreenTask]:
     return db.query(ScreenTask).filter(ScreenTask.name == name).first()
+
+
+async def _health_check_loop():
+    """定期检查screen会话存活状态，更新数据库状态"""
+    global _health_check_task
+    while True:
+        try:
+            screens = await list_screens()
+            alive_sessions = {s["name"] for s in screens}
+            
+            db = SessionLocal()
+            try:
+                tasks = db.query(ScreenTask).filter(ScreenTask.status == "running").all()
+                for task in tasks:
+                    if task.name not in alive_sessions:
+                        logger.info(f"Health check: Session {task.name} is dead, updating status to stopped")
+                        task.status = "stopped"
+                        task.finished_at = datetime.utcnow()
+                db.commit()
+            except Exception as e:
+                logger.error(f"Health check DB error: {e}")
+                db.rollback()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+        
+        await asyncio.sleep(5)
+
+
+def start_health_check():
+    """启动会话健康检查"""
+    global _health_check_task
+    if _health_check_task is None or _health_check_task.done():
+        _health_check_task = asyncio.create_task(_health_check_loop())
+        logger.info("Screen health check started")

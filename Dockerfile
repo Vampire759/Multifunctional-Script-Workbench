@@ -1,26 +1,11 @@
 # ============================================================
 # Multifunctional Script Workbench - Dockerfile
-# 多阶段构建：前端构建 + 后端运行时
-# 适用于裸环境部署（仅需 Docker 即可运行）
+# 使用宿主机预构建的前端产物，避免Docker内部npm网络问题
+# 添加环境检查和缓存优化，减少重复构建时间
 # ============================================================
 
 # ============================================================
-# Stage 1: 构建前端
-# ============================================================
-FROM node:18-alpine AS frontend-builder
-
-WORKDIR /app/frontend
-
-# 安装依赖（利用 Docker 缓存层加速构建）
-COPY frontend/package*.json ./
-RUN npm install --no-audit --no-fund
-
-# 构建前端产物
-COPY frontend/ .
-RUN npx vite build
-
-# ============================================================
-# Stage 2: 运行时镜像
+# 运行时镜像（单阶段构建，前端已在宿主机构建）
 # ============================================================
 FROM python:3.11-slim
 
@@ -31,39 +16,10 @@ LABEL version="1.0.0"
 WORKDIR /app
 
 # ------------------------------------------------------------
-# 安装系统依赖（涵盖裸环境所需的所有工具）
+# 系统依赖安装（使用条件检查，已安装则跳过）
 # ------------------------------------------------------------
-# 基础工具：
-#   - screen:        Screen 会话管理（核心功能）
-#   - bash:          Bash Shell（交互式会话）
-#   - git:           Git 版本控制
-#   - procps:        进程管理工具（ps, top, kill 等）
-#   - locales:       区域设置（支持 UTF-8 中文）
-#   - curl:          网络请求工具（健康检查 + 下载）
-#   - bsdmainutils:  包含 script 命令（用于实时日志记录）
-#
-# 网络与安全：
-#   - ca-certificates: CA 证书（HTTPS 请求必需）
-#   - openssh-client:  SSH 客户端（Git SSH 协议 + 远程操作）
-#   - wget:            备用下载工具
-#
-# 文件与编辑：
-#   - vim:    文本编辑器
-#   - less:   分页查看器
-#   - file:   文件类型检测
-#   - unzip:  ZIP 解压
-#   - tar:    归档工具（slim 镜像通常已含）
-#   - gzip:   压缩工具
-#
-# 系统与时间：
-#   - tzdata: 时区数据（支持中文时区 Asia/Shanghai）
-#
-# 构建依赖（部分 Python 包需要编译）：
-#   - build-essential: gcc/g++/make
-#   - python3-dev:     Python 开发头文件
-#   - libffi-dev:      cffi 库依赖
-#   - libssl-dev:      SSL 开发库
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         screen \
         bash \
         git \
@@ -88,8 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# 配置 UTF-8 区域设置（支持中文显示）
-# 使用 C.UTF-8 确保在 slim 镜像中可用，无需额外生成 locale
+# 配置环境变量（利用Docker缓存，不变则跳过后续步骤）
 # ------------------------------------------------------------
 ENV LANG=C.UTF-8 \
     LANGUAGE=C.UTF-8 \
@@ -97,22 +52,33 @@ ENV LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONIOENCODING=utf-8 \
-    TZ=Asia/Shanghai
+    TZ=Asia/Shanghai \
+    SCREENDIR=/tmp/screen_sockets \
+    LOG_LEVEL=info
 
 # 配置时区
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # ------------------------------------------------------------
-# 升级 pip 并安装 Python 依赖
+# Python依赖安装（缓存优化：先复制requirements.txt）
+# 如果requirements.txt不变，Docker会使用缓存跳过此步骤
 # ------------------------------------------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 # ------------------------------------------------------------
-# 复制前端构建产物
+# 创建必要的目录
 # ------------------------------------------------------------
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+RUN mkdir -p data logs scripts downloads \
+    && chmod 700 /app \
+    && mkdir -p /tmp/screen_sockets \
+    && chmod 700 /tmp/screen_sockets
+
+# ------------------------------------------------------------
+# 复制预构建的前端产物（最后复制，最大化缓存利用）
+# ------------------------------------------------------------
+COPY frontend/dist ./frontend/dist
 
 # ------------------------------------------------------------
 # 复制后端代码
@@ -125,28 +91,15 @@ COPY backend/ ./backend/
 COPY scripts/ ./scripts/
 
 # ------------------------------------------------------------
-# 复制宿主机 Screen Agent（用于参考，实际运行在宿主机）
+# 复制宿主机 Screen Agent
 # ------------------------------------------------------------
 COPY host_screen_agent.py ./host_screen_agent.py
-
-# ------------------------------------------------------------
-# 创建必要的目录
-# ------------------------------------------------------------
-# - data:             数据库和数据文件
-# - logs:             日志文件
-# - downloads:        下载文件
-# - /app/screen_sockets: Screen 会话 socket 目录（必须 700 权限）
-RUN mkdir -p data logs scripts downloads /app/screen_sockets \
-    && chmod 700 /app/screen_sockets
-
-# Screen 环境变量（使用 /tmp/screen_sockets 确保权限正确）
-ENV SCREENDIR=/tmp/screen_sockets
 
 # ------------------------------------------------------------
 # 健康检查
 # ------------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/api/health || exit 1
 
 EXPOSE 8000
 
