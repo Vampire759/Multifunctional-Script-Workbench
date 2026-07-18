@@ -208,15 +208,18 @@ export default function Scheduler() {
             <div>
               <label className="text-xs font-mono text-muted-dim">执行类型</label>
               <select
-                value={form.target_type}
-                onChange={(e) => setForm({ 
-                  ...form, 
-                  target_type: e.target.value as "task" | "screen" | "script",
-                  target_id: e.target.value === "task" ? (tasks[0]?.id || 0) : 0,
-                  screen_name: "",
-                  script_id: e.target.value === "script" ? (scripts[0]?.id || 0) : 0,
-                })}
-                className="input-cyber mt-1"
+                  value={form.target_type}
+                  onChange={(e) => {
+                    const newValue = e.target.value as "task" | "screen" | "script";
+                    setForm({ 
+                      ...form, 
+                      target_type: newValue,
+                      target_id: newValue === "task" ? (tasks[0]?.id || 0) : 0,
+                      screen_name: newValue === "screen" ? form.screen_name : "",
+                      script_id: newValue === "script" ? (scripts[0]?.id || 0) : 0,
+                    });
+                  }}
+                  className="input-cyber mt-1"
               >
                 {targetTypes.map((t) => {
                   const Icon = t.icon;
