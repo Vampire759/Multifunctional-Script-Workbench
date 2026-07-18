@@ -411,7 +411,7 @@ export default function LogCenter() {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0 overflow-hidden">
         <div className="lg:col-span-1">
           <div className="glass-card h-full flex flex-col">
             <div className="p-3 border-b border-ink-700/60">
@@ -693,14 +693,14 @@ export default function LogCenter() {
           </div>
         </div>
 
-        <div className="lg:col-span-3 flex flex-col">
+        <div className="lg:col-span-3 flex flex-col min-h-0">
           <AnimatePresence>
             {selectedTask ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="glass-card flex-1 flex flex-col"
+                className="glass-card flex-1 flex flex-col min-h-0"
               >
                 <div className="p-4 border-b border-ink-700/60 flex items-center justify-between">
                   <div>
