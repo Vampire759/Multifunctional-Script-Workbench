@@ -27,7 +27,6 @@ export default function Dashboard() {
   const timerRef = useRef<number | null>(null);
 
   const MAX_LOG_LINES = 2000;
-  const logHashRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {
@@ -102,7 +101,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (selectedScreen) {
       setLogs([]);
-      logHashRef.current.clear();
       setAutoScroll(true);
       setCurrentProgress(null);
       setProgressMessage("");
@@ -135,16 +133,9 @@ export default function Dashboard() {
           if (msg.type === "log" && msg.payload?.log_line) {
             const logLine = parseLogLine(msg.payload.log_line);
             logLine.isInput = msg.payload.level === "input";
-            const hash = `${logLine.text}:${logLine.ts}:${logLine.isInput}`;
-            if (logHashRef.current.has(hash)) {
-              return;
-            }
-            logHashRef.current.add(hash);
             setLogs((prev) => {
               const newLogs = [...prev, logLine];
               if (newLogs.length > MAX_LOG_LINES) {
-                const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES);
-                removed.forEach(l => logHashRef.current.delete(`${l.text}:${l.ts}:${l.isInput}`));
                 return newLogs.slice(-MAX_LOG_LINES);
               }
               return newLogs;

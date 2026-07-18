@@ -35,7 +35,6 @@ export default function LogCenter() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const MAX_LOG_LINES = 2000;
-  const logHashRef = useRef<Set<string>>(new Set());
 
   const [leftPanelMode, setLeftPanelMode] = useState<LeftPanelMode>("history");
   const [logFiles, setLogFiles] = useState<LogFile[]>([]);
@@ -100,16 +99,9 @@ export default function LogCenter() {
         if (msg.type === "log" && msg.payload?.log_line) {
           const logLine = parseLogLine(msg.payload.log_line);
           logLine.isInput = msg.payload.level === "input";
-          const hash = `${logLine.text}:${logLine.ts}:${logLine.isInput}`;
-          if (logHashRef.current.has(hash)) {
-            return;
-          }
-          logHashRef.current.add(hash);
           setLogs((prev) => {
             const newLogs = [...prev, logLine];
             if (newLogs.length > MAX_LOG_LINES) {
-              const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES);
-              removed.forEach(l => logHashRef.current.delete(`${l.text}:${l.ts}:${l.isInput}`));
               return newLogs.slice(-MAX_LOG_LINES);
             }
             return newLogs;
@@ -136,14 +128,10 @@ export default function LogCenter() {
   useEffect(() => {
     if (selectedTask) {
       setLogs([]);
-      logHashRef.current.clear();
       setCurrentProgress(null);
       setProgressMessage("");
       getScreenLog(selectedTask.name, 200).then((r: any) => {
         const existingLogs = r.log?.split("\n").filter(Boolean).map(parseLogLine) || [];
-        existingLogs.forEach(log => {
-          logHashRef.current.add(`${log.text}:${log.ts}:${log.isInput}`);
-        });
         setLogs(existingLogs);
       });
 
@@ -367,7 +355,7 @@ export default function LogCenter() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto flex flex-col h-[calc(100vh-2rem)]">
       <PageHeader
         title="日志中心"
         subtitle="管理 Screen 会话，实时监控服务器端命令执行日志"
@@ -423,7 +411,7 @@ export default function LogCenter() {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
         <div className="lg:col-span-1">
           <div className="glass-card h-full flex flex-col">
             <div className="p-3 border-b border-ink-700/60">
