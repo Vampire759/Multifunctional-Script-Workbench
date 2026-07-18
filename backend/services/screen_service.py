@@ -19,9 +19,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-SCREEN_SOCK_DIR = "/tmp/screen_sockets"
+SCREEN_SOCK_DIR = os.path.join(PROJECT_ROOT, "screen_sockets")
 os.makedirs(SCREEN_SOCK_DIR, exist_ok=True)
-os.chmod(SCREEN_SOCK_DIR, 700)
+os.chmod(SCREEN_SOCK_DIR, 0o700)
 os.environ['SCREENDIR'] = SCREEN_SOCK_DIR
 
 logger.info(f"Screen socket directory: {SCREEN_SOCK_DIR}")
@@ -370,6 +370,11 @@ async def _broadcast_log(session_name: str, log_path: str):
                 continue
             
             try:
+                file_size = os.path.getsize(log_path)
+                if last_pos > file_size:
+                    logger.warning(f"Log file truncated, resetting position from {last_pos} to 0 for {session_name}")
+                    last_pos = 0
+                
                 with open(log_path, "r", encoding="utf-8", errors="replace") as f:
                     f.seek(last_pos)
                     content = f.read()

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Activity, Terminal, Clock, RefreshCw, Save, ToggleLeft, ToggleRight } from "lucide-react";
+import { Activity, Terminal, Clock, RefreshCw, Save, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
-import { listScreens, saveScreenLog, type ScreenTask } from "../lib/api";
+import { listScreens, saveScreenLog, createScreen, type ScreenTask } from "../lib/api";
 
 interface LogLine {
   text: string;
@@ -21,16 +21,13 @@ export default function Dashboard() {
   const [progressMessage, setProgressMessage] = useState("");
   const [runningDuration, setRunningDuration] = useState(0);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
-  const [autoSaveInterval, setAutoSaveInterval] = useState(300);
-  const [lastSaveTime, setLastSaveTime] = useState("");
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<number | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
 
   const MAX_LOG_LINES = 2000;
+  const logHashRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {
@@ -71,26 +68,18 @@ export default function Dashboard() {
   const saveLogs = useCallback(async () => {
     if (!selectedScreen) return;
     try {
-      const result = await saveScreenLog(selectedScreen.name);
-      if (result.success) {
-        setLastSaveTime(new Date().toLocaleString());
-      }
+      await saveScreenLog(selectedScreen.name);
     } catch (e) {
       console.error("Failed to save log:", e);
     }
   }, [selectedScreen]);
 
-  const toggleAutoSave = async () => {
-    if (autoSaveEnabled) {
-      if (saveTimerRef.current) {
-        clearInterval(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      setAutoSaveEnabled(false);
-    } else {
-      await saveLogs();
-      saveTimerRef.current = window.setInterval(saveLogs, autoSaveInterval * 1000);
-      setAutoSaveEnabled(true);
+  const retryScreen = async (screen: ScreenTask) => {
+    try {
+      await createScreen(screen.name, screen.command);
+      loadScreens();
+    } catch (e) {
+      console.error("Failed to retry screen:", e);
     }
   };
 
@@ -113,6 +102,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (selectedScreen) {
       setLogs([]);
+      logHashRef.current.clear();
       setAutoScroll(true);
       setCurrentProgress(null);
       setProgressMessage("");
@@ -145,9 +135,16 @@ export default function Dashboard() {
           if (msg.type === "log" && msg.payload?.log_line) {
             const logLine = parseLogLine(msg.payload.log_line);
             logLine.isInput = msg.payload.level === "input";
+            const hash = `${logLine.text}:${logLine.ts}:${logLine.isInput}`;
+            if (logHashRef.current.has(hash)) {
+              return;
+            }
+            logHashRef.current.add(hash);
             setLogs((prev) => {
               const newLogs = [...prev, logLine];
               if (newLogs.length > MAX_LOG_LINES) {
+                const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES);
+                removed.forEach(l => logHashRef.current.delete(`${l.text}:${l.ts}:${l.isInput}`));
                 return newLogs.slice(-MAX_LOG_LINES);
               }
               return newLogs;
@@ -172,11 +169,6 @@ export default function Dashboard() {
         if (timerRef.current) {
           clearInterval(timerRef.current);
         }
-        if (saveTimerRef.current) {
-          clearInterval(saveTimerRef.current);
-          saveTimerRef.current = null;
-        }
-        setAutoSaveEnabled(false);
       };
     } else {
       if (wsRef.current) {
@@ -186,11 +178,6 @@ export default function Dashboard() {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      if (saveTimerRef.current) {
-        clearInterval(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      setAutoSaveEnabled(false);
     }
   }, [selectedScreen?.name]);
 
@@ -218,21 +205,23 @@ export default function Dashboard() {
   };
 
   const statusColor = (status: string) => {
-    if (status.includes("running") || status.includes("detached")) return "text-neon-cyan";
-    if (status === "stopped") return "text-muted-dim";
+    const s = status.toLowerCase();
+    if (s.includes("running") || s.includes("detached")) return "text-neon-cyan";
+    if (s === "stopped") return "text-muted-dim";
     return "text-neon-rose";
   };
 
   const statusText = (status: string) => {
-    if (status.includes("running") || status.includes("detached")) return "运行中";
-    if (status === "stopped") return "已停止";
+    const s = status.toLowerCase();
+    if (s.includes("running") || s.includes("detached")) return "运行中";
+    if (s === "stopped") return "已停止";
     return "失败";
   };
 
   const scriptScreens = screens.filter((s) => s.name.startsWith("script_"));
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto flex flex-col h-[calc(100vh-2rem)]">
       <PageHeader
         title="任务台"
         subtitle="查看运行中的任务和实时日志"
@@ -244,13 +233,13 @@ export default function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         <div className="lg:col-span-1">
-          <div className="glass-card">
+          <div className="glass-card h-full flex flex-col">
             <div className="p-4 border-b border-ink-700/60">
               <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">任务列表</h3>
             </div>
-            <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+            <div className="flex-1 overflow-y-auto">
               {screens.length === 0 && (
                 <div className="p-8 text-center text-muted-dim font-mono">
                   暂无任务
@@ -274,12 +263,23 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-dim truncate">{screen.command || "-"}</div>
-                  {screen.started_at && (
-                    <div className="text-xs text-muted-dim mt-2 flex items-center gap-1">
-                      <Clock size={12} />
-                      {formatDuration(Math.floor((new Date().getTime() - new Date(screen.started_at).getTime()) / 1000))}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    {(statusText(screen.status) === "失败" || statusText(screen.status) === "已停止") && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); retryScreen(screen); }}
+                        className="p-1.5 rounded text-neon-amber hover:bg-neon-amber/20 transition-all"
+                        title="重新启动会话"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                    )}
+                    {screen.started_at && (
+                      <span className="text-xs text-muted-dim flex items-center gap-1">
+                        <Clock size={12} />
+                        {formatDuration(Math.floor((new Date().getTime() - new Date(screen.started_at).getTime()) / 1000))}
+                      </span>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -372,24 +372,15 @@ export default function Dashboard() {
                 </div>
                 <div className="p-3 border-t border-ink-700/60 flex items-center justify-between bg-ink-900/50">
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleAutoSave}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all ${
-                        autoSaveEnabled
-                          ? "bg-neon-green/20 text-neon-green"
-                          : "bg-ink-800/30 text-muted hover:bg-ink-800/50"
-                      }`}
-                      title={autoSaveEnabled ? "关闭定时保存" : "开启定时保存"}
-                    >
-                      {autoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                    </button>
-                    <span className={`text-xs ${autoSaveEnabled ? "text-neon-green" : "text-muted-dim"}`}>
-                      {autoSaveEnabled ? "定时保存已开启" : "定时保存已关闭"}
-                    </span>
-                    {lastSaveTime && (
-                      <span className="text-xs text-muted-dim ml-2">
-                        上次保存: {lastSaveTime}
-                      </span>
+                    {selectedScreen && (statusText(selectedScreen.status) === "失败" || statusText(selectedScreen.status) === "已停止") && (
+                      <button
+                        onClick={() => retryScreen(selectedScreen)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-neon-amber/20 text-neon-amber hover:bg-neon-amber/30 transition-all"
+                        title="重新启动会话"
+                      >
+                        <RotateCcw size={14} />
+                        重试
+                      </button>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -401,24 +392,6 @@ export default function Dashboard() {
                       <Save size={14} />
                       保存日志
                     </button>
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} className="text-muted-dim" />
-                      <input
-                        type="number"
-                        value={autoSaveInterval}
-                        onChange={(e) => {
-                          const val = Math.max(10, parseInt(e.target.value) || 300);
-                          setAutoSaveInterval(val);
-                          if (autoSaveEnabled && saveTimerRef.current) {
-                            clearInterval(saveTimerRef.current);
-                            saveTimerRef.current = window.setInterval(saveLogs, val * 1000);
-                          }
-                        }}
-                        className="w-16 px-2 py-1 bg-ink-800/50 border border-ink-700/50 rounded text-xs font-mono text-gray-200 focus:outline-none focus:border-neon-cyan/50"
-                        min={10}
-                      />
-                      <span className="text-xs text-muted-dim">秒</span>
-                    </div>
                   </div>
                 </div>
               </motion.div>

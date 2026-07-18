@@ -448,14 +448,14 @@ class ScreenHandler(http.server.BaseHTTPRequestHandler):
                     save_dir=data.get('save_dir')
                 ))
             
-            elif path.startswith('/auto-save/start/'):
-                name = path[17:]
+            elif '/auto-save/start/' in path:
+                name = path.split('/auto-save/start/')[1]
                 data = json.loads(body) if body else {}
                 interval = data.get('interval')
                 self.send_json(start_auto_save(name, interval))
             
-            elif path.startswith('/auto-save/stop/'):
-                name = path[16:]
+            elif '/auto-save/stop/' in path:
+                name = path.split('/auto-save/stop/')[1]
                 self.send_json(stop_auto_save(name))
             
             elif path.startswith('/save/'):
@@ -463,7 +463,7 @@ class ScreenHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json(save_screen_log(name))
             
             else:
-                self.send_json({'success': False, 'message': 'Unknown endpoint'}, 404)
+                self.send_json({'success': False, 'message': f'Unknown endpoint: {path}'}, 404)
         
         except Exception as e:
             self.send_json({'success': False, 'message': str(e)}, 500)

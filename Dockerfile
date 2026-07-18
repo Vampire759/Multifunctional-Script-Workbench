@@ -53,7 +53,7 @@ ENV LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONIOENCODING=utf-8 \
     TZ=Asia/Shanghai \
-    SCREENDIR=/tmp/screen_sockets \
+    SCREENDIR=/app/screen_sockets \
     LOG_LEVEL=info
 
 # 配置时区
@@ -64,16 +64,15 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 如果requirements.txt不变，Docker会使用缓存跳过此步骤
 # ------------------------------------------------------------
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    && pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ------------------------------------------------------------
 # 创建必要的目录
 # ------------------------------------------------------------
-RUN mkdir -p data logs scripts downloads \
+RUN mkdir -p data logs scripts downloads screen_sockets \
     && chmod 700 /app \
-    && mkdir -p /tmp/screen_sockets \
-    && chmod 700 /tmp/screen_sockets
+    && chmod 700 /app/screen_sockets
 
 # ------------------------------------------------------------
 # 复制预构建的前端产物（最后复制，最大化缓存利用）

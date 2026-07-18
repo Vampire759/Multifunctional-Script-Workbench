@@ -83,18 +83,27 @@ export default function LocalScreen() {
     if (!selectedScreen) return;
     if (autoSaveEnabled) {
       try {
-        await fetch(`/api/local-screen/auto-save/stop/${encodeURIComponent(selectedScreen)}`, {
+        const response = await fetch(`/api/local-screen/auto-save/stop/${encodeURIComponent(selectedScreen)}`, {
           method: "POST",
         });
-        setAutoSaveEnabled(false);
+        const data = await response.json();
+        if (data.success) {
+          setAutoSaveEnabled(false);
+        } else {
+          alert(`停止失败: ${data.message}`);
+        }
       } catch (err) {
         alert("操作失败");
       }
     } else {
       try {
         const response = await fetch(
-          `/api/local-screen/auto-save/start/${encodeURIComponent(selectedScreen)}?interval=${autoSaveInterval}`,
-          { method: "POST" }
+          `/api/local-screen/auto-save/start/${encodeURIComponent(selectedScreen)}`,
+          { 
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ interval: autoSaveInterval })
+          }
         );
         const data = await response.json();
         if (data.success) {

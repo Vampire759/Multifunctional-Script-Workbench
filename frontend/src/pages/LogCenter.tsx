@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Terminal, Play, Square, Trash2, RefreshCw, LogIn, Send, AlertCircle, CheckCircle, Info, Monitor, Save, Clock, ToggleLeft, ToggleRight, FolderOpen, Folder, FileText, Download, Search, ChevronDown, ChevronRight as ChevronRightIcon, LayoutGrid, List } from "lucide-react";
+import { Terminal, Play, Square, Trash2, RefreshCw, LogIn, Send, AlertCircle, CheckCircle, Info, Monitor, Save, FolderOpen, Folder, FileText, Download, Search, ChevronDown, ChevronRight as ChevronRightIcon, LayoutGrid, List, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/PageHeader";
 import TerminalComponent from "../components/Terminal";
@@ -29,12 +29,13 @@ export default function LogCenter() {
   const [currentProgress, setCurrentProgress] = useState<number | null>(null);
   const [progressMessage, setProgressMessage] = useState("");
   const [terminalMode, setTerminalMode] = useState(false);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
-  const [autoSaveInterval, setAutoSaveInterval] = useState(300);
-  const [lastSaveTime, setLastSaveTime] = useState<string | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
+
+  const MAX_LOG_LINES = 2000;
+  const logHashRef = useRef<Set<string>>(new Set());
 
   const [leftPanelMode, setLeftPanelMode] = useState<LeftPanelMode>("history");
   const [logFiles, setLogFiles] = useState<LogFile[]>([]);
@@ -47,8 +48,17 @@ export default function LogCenter() {
   const [confirmDelete, setConfirmDelete] = useState<{ type: "file" | "session"; name: string } | null>(null);
 
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    if (autoScroll && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, autoScroll]);
+
+  const handleScroll = () => {
+    if (!logContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setAutoScroll(isAtBottom);
+  };
 
   const parseLogLine = (line: string): LogLine => {
     const progressMatch = line.match(/^\[PROGRESS\]\s*(\{.*\})$/);
@@ -90,7 +100,20 @@ export default function LogCenter() {
         if (msg.type === "log" && msg.payload?.log_line) {
           const logLine = parseLogLine(msg.payload.log_line);
           logLine.isInput = msg.payload.level === "input";
-          setLogs((prev) => [...prev, logLine]);
+          const hash = `${logLine.text}:${logLine.ts}:${logLine.isInput}`;
+          if (logHashRef.current.has(hash)) {
+            return;
+          }
+          logHashRef.current.add(hash);
+          setLogs((prev) => {
+            const newLogs = [...prev, logLine];
+            if (newLogs.length > MAX_LOG_LINES) {
+              const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES);
+              removed.forEach(l => logHashRef.current.delete(`${l.text}:${l.ts}:${l.isInput}`));
+              return newLogs.slice(-MAX_LOG_LINES);
+            }
+            return newLogs;
+          });
         }
       } catch {
         // ignore
@@ -113,10 +136,14 @@ export default function LogCenter() {
   useEffect(() => {
     if (selectedTask) {
       setLogs([]);
+      logHashRef.current.clear();
       setCurrentProgress(null);
       setProgressMessage("");
       getScreenLog(selectedTask.name, 200).then((r: any) => {
         const existingLogs = r.log?.split("\n").filter(Boolean).map(parseLogLine) || [];
+        existingLogs.forEach(log => {
+          logHashRef.current.add(`${log.text}:${log.ts}:${log.isInput}`);
+        });
         setLogs(existingLogs);
       });
 
@@ -160,22 +187,7 @@ export default function LogCenter() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    setLastSaveTime(new Date().toLocaleString());
   }, [selectedTask, logs]);
-
-  const toggleAutoSave = () => {
-    if (autoSaveEnabled) {
-      if (saveTimerRef.current) {
-        clearInterval(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    } else {
-      saveLogs();
-      saveTimerRef.current = window.setInterval(saveLogs, autoSaveInterval * 1000);
-    }
-    setAutoSaveEnabled(!autoSaveEnabled);
-  };
 
   const loadSessions = async () => {
     setLoading(true);
@@ -185,6 +197,15 @@ export default function LogCenter() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const retryScreen = async (task: ScreenTask) => {
+    try {
+      await createScreen(task.name, task.command);
+      loadSessions();
+    } catch (e) {
+      console.error("Failed to retry screen:", e);
     }
   };
 
@@ -204,27 +225,8 @@ export default function LogCenter() {
       loadSessions();
       loadHistoryLogs();
     }, 10000);
-    return () => {
-      clearInterval(t);
-      if (saveTimerRef.current) {
-        clearInterval(saveTimerRef.current);
-      }
-    };
+    return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    if (autoSaveEnabled && saveTimerRef.current) {
-      clearInterval(saveTimerRef.current);
-      saveTimerRef.current = window.setInterval(saveLogs, autoSaveInterval * 1000);
-    }
-  }, [autoSaveInterval, autoSaveEnabled, saveLogs]);
-
-  useEffect(() => {
-    if (saveTimerRef.current) {
-      clearInterval(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-  }, [selectedTask]);
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -480,13 +482,22 @@ export default function LogCenter() {
                       {task.command || "-"}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
-                      {(task.status.includes("running") || task.status.includes("detached")) && (
+                      {(task.status.toLowerCase().includes("running") || task.status.toLowerCase().includes("detached")) && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleStop(task); }}
                           className="p-1.5 rounded text-muted hover:text-neon-amber hover:bg-ink-800/60 transition-all"
                           title="终止"
                         >
                           <Square size={14} />
+                        </button>
+                      )}
+                      {!task.status.toLowerCase().includes("running") && !task.status.toLowerCase().includes("detached") && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); retryScreen(task); }}
+                          className="p-1.5 rounded text-muted hover:text-neon-green hover:bg-ink-800/60 transition-all"
+                          title="重新启动会话"
+                        >
+                          <RotateCcw size={14} />
                         </button>
                       )}
                       <button
@@ -705,11 +716,32 @@ export default function LogCenter() {
               >
                 <div className="p-4 border-b border-ink-700/60 flex items-center justify-between">
                   <div>
-                    <h3 className="font-mono text-gray-100">{selectedTask.name}</h3>
-                    <p className="text-xs text-muted-dim">{selectedTask.command}</p>
+                    <h3 className="font-mono text-gray-100 flex items-center gap-2">
+                      <Terminal size={16} className="text-neon-cyan" />
+                      {selectedTask.name}
+                    </h3>
+                    <div className="flex items-center gap-4 mt-1">
+                      <p className="text-xs text-muted-dim">{selectedTask.command}</p>
+                      <span className="text-xs text-muted-dim">
+                        {logs.length} 行
+                        {!autoScroll && <span className="text-neon-amber ml-2">（已暂停滚动）</span>}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {(selectedTask.status.includes("running") || selectedTask.status.includes("detached")) && (
+                    {!autoScroll && (
+                      <button
+                        onClick={() => {
+                          setAutoScroll(true);
+                          logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className="btn-ghost flex items-center gap-1 text-xs"
+                        title="滚动到底部"
+                      >
+                        <RefreshCw size={12} /> 回到底部
+                      </button>
+                    )}
+                    {(selectedTask.status.toLowerCase().includes("running") || selectedTask.status.toLowerCase().includes("detached")) && (
                       <>
                         <button
                           onClick={() => setTerminalMode(!terminalMode)}
@@ -721,6 +753,14 @@ export default function LogCenter() {
                           <Square size={14} /> 终止
                         </button>
                       </>
+                    )}
+                    {(statusText(selectedTask.status) === "失败" || statusText(selectedTask.status) === "已停止") && (
+                      <button
+                        onClick={() => retryScreen(selectedTask)}
+                        className="btn-neon flex items-center gap-1"
+                      >
+                        <RotateCcw size={14} /> 重试
+                      </button>
                     )}
                     <button
                       onClick={saveLogs}
@@ -759,7 +799,11 @@ export default function LogCenter() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex-1 p-4 overflow-y-auto font-mono text-sm" ref={logsEndRef}>
+                    <div 
+                      className="flex-1 p-4 overflow-y-auto font-mono text-sm min-h-0" 
+                      ref={logContainerRef}
+                      onScroll={handleScroll}
+                    >
                       {logs.length === 0 && (
                         <div className="text-center text-muted-dim py-8">等待日志...</div>
                       )}
@@ -770,9 +814,10 @@ export default function LogCenter() {
                           {log.isInput ? ">" : levelIcon(log.level)}{log.text}
                         </div>
                       ))}
+                      <div ref={logsEndRef} />
                     </div>
 
-                    {(selectedTask.status.includes("running") || selectedTask.status.includes("detached")) && (
+                    {(selectedTask.status.toLowerCase().includes("running") || selectedTask.status.toLowerCase().includes("detached")) && (
                       <div className="p-4 border-t border-ink-700/60">
                         <div className="flex items-center gap-3 bg-ink-900/60 rounded-lg px-4 py-2">
                           <span className="text-neon-cyan font-mono text-sm">{'>'}</span>
@@ -800,46 +845,7 @@ export default function LogCenter() {
                       </div>
                     )}
 
-                    <div className="p-4 border-t border-ink-700/60 bg-ink-900/30">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={toggleAutoSave}
-                              className={`p-2 rounded-lg transition-colors ${
-                                autoSaveEnabled ? "bg-neon-green/20 text-neon-green" : "bg-ink-800/30 text-muted"
-                              }`}
-                              title={autoSaveEnabled ? "关闭定时保存" : "开启定时保存"}
-                            >
-                              {autoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                            </button>
-                            <span className={`text-sm ${autoSaveEnabled ? "text-neon-green" : "text-muted-dim"}`}>
-                              {autoSaveEnabled ? "定时保存已开启" : "定时保存已关闭"}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <Clock size={14} className="text-muted-dim" />
-                            <input
-                              type="number"
-                              value={autoSaveInterval}
-                              onChange={(e) => setAutoSaveInterval(Math.max(30, Math.min(3600, Number(e.target.value))))}
-                              min={30}
-                              max={3600}
-                              className="w-20 bg-ink-800/30 border border-ink-700/60 rounded px-2 py-1 text-xs font-mono text-gray-300 outline-none focus:border-neon-cyan/50"
-                              placeholder="间隔(秒)"
-                            />
-                            <span className="text-xs text-muted-dim">秒</span>
-                          </div>
-                          {lastSaveTime && (
-                            <span className="text-xs text-muted-dim">
-                              上次保存: {lastSaveTime}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+
                   </>
                 )}
               </motion.div>
