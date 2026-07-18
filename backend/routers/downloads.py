@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import DownloadTask
+from backend.models import DownloadTask, ScreenTask
 from backend.schemas import GenericResp
-from backend.services import download_service
+from backend.services import download_service, screen_service
 from backend.services.websocket_hub import hub
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -142,7 +142,7 @@ async def retry_download(task_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{task_id}", response_model=GenericResp)
 async def delete_download(task_id: int, db: Session = Depends(get_db)):
-    """删除下载任务，同时停止对应的screen会话"""
+    """删除下载任务，同时停止对应的screen会话并清理数据库记录"""
     task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -152,6 +152,10 @@ async def delete_download(task_id: int, db: Session = Depends(get_db)):
         await screen_service.stop_screen(session_name, db)
     except Exception:
         pass
+    
+    screen_task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
+    if screen_task:
+        db.delete(screen_task)
     
     db.delete(task)
     db.commit()
