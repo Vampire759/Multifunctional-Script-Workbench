@@ -53,6 +53,7 @@
 ### ⏰ 定时任务
 - 基于 Cron 表达式的灵活调度
 - 支持关联任务、Screen 会话或脚本
+- 支持向容器内和宿主机的 Screen 会话发送命令
 - 调度历史记录查看
 
 ### 📥 下载管理
@@ -492,10 +493,11 @@ sudo systemctl start workbench-agent
 - `GET /api/screen/{name}/log` - 获取会话日志
 
 #### 定时任务
-- `GET /api/scheduler/jobs` - 获取定时任务列表
-- `POST /api/scheduler/jobs` - 创建定时任务
-- `PUT /api/scheduler/jobs/{id}` - 更新定时任务
-- `DELETE /api/scheduler/jobs/{id}` - 删除定时任务
+- `GET /api/schedules` - 获取定时任务列表
+- `POST /api/schedules` - 创建定时任务（支持 screen_source 参数区分容器内/宿主机会话）
+- `PATCH /api/schedules/{id}` - 更新定时任务
+- `DELETE /api/schedules/{id}` - 删除定时任务
+- `POST /api/schedules/{id}/trigger` - 手动触发定时任务
 
 #### 脚本管理
 - `GET /api/scripts` - 获取脚本列表

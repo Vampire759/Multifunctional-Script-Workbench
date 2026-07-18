@@ -32,6 +32,7 @@ export default function Scheduler() {
     target_type: "task" as "task" | "screen" | "script",
     target_id: 0,
     screen_name: "",
+    screen_source: "" as "container" | "local" | "",
     script_id: 0,
     command: "",
     enabled: true 
@@ -100,6 +101,7 @@ export default function Scheduler() {
         target_type: form.target_type,
         target_id: form.target_type === "task" ? form.target_id : undefined,
         screen_name: form.target_type === "screen" ? form.screen_name : undefined,
+        screen_source: form.target_type === "screen" ? form.screen_source : undefined,
         script_id: form.target_type === "script" ? form.script_id : undefined,
         command: form.command || undefined,
         enabled: form.enabled,
@@ -111,6 +113,7 @@ export default function Scheduler() {
         target_type: "task",
         target_id: tasks[0]?.id || 0,
         screen_name: "",
+        screen_source: "",
         script_id: scripts[0]?.id || 0,
         command: "",
         enabled: true 
@@ -214,11 +217,13 @@ export default function Scheduler() {
                   value={form.target_type}
                   onChange={(e) => {
                     const newValue = e.target.value as "task" | "screen" | "script";
+                    const firstScreen = screens[0];
                     setForm({ 
                       ...form, 
                       target_type: newValue,
                       target_id: newValue === "task" ? (tasks[0]?.id || 0) : 0,
-                      screen_name: newValue === "screen" ? (screens[0]?.name || "") : "",
+                      screen_name: newValue === "screen" ? (firstScreen?.name || "") : "",
+                      screen_source: newValue === "screen" ? ((firstScreen as any)?.source || "") : "",
                       script_id: newValue === "script" ? (scripts[0]?.id || 0) : 0,
                     });
                   }}
@@ -256,21 +261,24 @@ export default function Scheduler() {
               <div>
                 <label className="text-xs font-mono text-muted-dim">Screen会话</label>
                 <select
-                  value={form.screen_name}
-                  onChange={(e) => setForm({ ...form, screen_name: e.target.value })}
+                  value={`${form.screen_source}|${form.screen_name}`}
+                  onChange={(e) => {
+                    const [source, name] = e.target.value.split("|");
+                    setForm({ ...form, screen_name: name, screen_source: source as "container" | "local" | "" });
+                  }}
                   className="input-cyber mt-1"
                 >
-                  {screens.length === 0 && <option value="">暂无会话</option>}
+                  {screens.length === 0 && <option value="|"></option>}
                   <optgroup label="容器内会话">
                     {screens.filter((s) => (s as any).source === "container").map((s) => (
-                      <option key={s.name} value={s.name} className="bg-ink-900">
+                      <option key={s.name} value={`container|${s.name}`} className="bg-ink-900">
                         {s.name} ({s.status})
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="宿主机会话">
                     {screens.filter((s) => (s as any).source === "local").map((s) => (
-                      <option key={s.name} value={s.name} className="bg-ink-900">
+                      <option key={s.name} value={`local|${s.name}`} className="bg-ink-900">
                         {s.name} ({s.status})
                       </option>
                     ))}

@@ -10,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from backend.database import SessionLocal
 from backend.models import Task, Schedule, Script
 from backend.services import scrape_service, screen_service
+from backend.routers.local_screen import _call_host_agent
 
 # 全局调度器
 scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
@@ -38,29 +39,53 @@ async def _run_scheduled_task(schedule_id: int):
         if not sched or not sched.enabled:
             return
 
+        print(f"[Scheduler] 开始执行定时任务 #{schedule_id}: {sched.name}, 类型: {sched.target_type}")
+
         if sched.target_type == "task":
             task = sched.task
             if not task:
+                print(f"[Scheduler] 任务不存在: {sched.target_id}")
                 return
             webhook_headers = json.loads(task.webhook_headers) if task.webhook_headers else None
             if task.type == "scrape":
                 urls = json.loads(task.urls) if task.urls else []
                 job_id = scrape_service.create_job_record(db, task_id=task.id, total=len(urls))
+                print(f"[Scheduler] 执行爬虫任务: {task.name}, URL数量: {len(urls)}")
                 await scrape_service.execute_scrape(
                     db, job_id, urls, task.max_workers or 5, task.id, task.webhook_url, webhook_headers
                 )
             else:
                 job_id = scrape_service.create_job_record(db, task_id=task.id, total=1)
+                print(f"[Scheduler] 执行命令任务: {task.name}, 命令: {task.command}")
                 await scrape_service.execute_command(
                     db, job_id, task.command or "", task.id, task.webhook_url, webhook_headers
                 )
         elif sched.target_type == "screen":
             if sched.screen_name:
                 cmd = sched.command or " "
-                await screen_service.send_command(sched.screen_name, cmd)
+                print(f"[Scheduler] 发送命令到Screen会话: {sched.screen_name}, 来源: {sched.screen_source or '未知'}, 命令: {repr(cmd)}")
+                if sched.screen_source == "local":
+                    print(f"[Scheduler] 发送命令到宿主机Screen会话")
+                    try:
+                        result = await _call_host_agent("POST", f"/send/{sched.screen_name}", json={"command": cmd})
+                        print(f"[Scheduler] 宿主机命令发送结果: {result}")
+                        success = result.get("success", False)
+                    except Exception as e:
+                        print(f"[Scheduler] 宿主机命令发送失败: {e}")
+                        success = False
+                else:
+                    screens = await screen_service.list_screens()
+                    screen_exists = any(s["name"] == sched.screen_name for s in screens)
+                    if not screen_exists:
+                        print(f"[Scheduler] 警告: 容器内Screen会话 '{sched.screen_name}' 不存在!")
+                    success = await screen_service.send_command(sched.screen_name, cmd)
+                print(f"[Scheduler] 命令发送结果: {'成功' if success else '失败'}")
+            else:
+                print(f"[Scheduler] Screen会话名称为空")
         elif sched.target_type == "script":
             script = sched.script
             if script and script.content:
+                print(f"[Scheduler] 执行脚本: {script.name}")
                 import subprocess
                 result = subprocess.run(
                     ["python", "-c", script.content],
@@ -71,9 +96,12 @@ async def _run_scheduled_task(schedule_id: int):
                 print(f"[Scheduler] 脚本执行结果: {result.stdout}")
                 if result.returncode != 0:
                     print(f"[Scheduler] 脚本执行错误: {result.stderr}")
+            else:
+                print(f"[Scheduler] 脚本不存在或内容为空")
 
         sched.last_run_at = datetime.utcnow()
         db.commit()
+        print(f"[Scheduler] 定时任务 #{schedule_id} 执行完成")
     except Exception as e:
         print(f"[Scheduler] 执行定时任务 {schedule_id} 失败: {e}")
     finally:

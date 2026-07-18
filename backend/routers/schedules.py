@@ -19,6 +19,7 @@ def _sched_to_out(sched: Schedule) -> ScheduleOut:
         target_type=sched.target_type,
         target_id=sched.target_id,
         screen_name=sched.screen_name,
+        screen_source=sched.screen_source,
         script_id=sched.script_id,
         command=sched.command,
         enabled=bool(sched.enabled),
@@ -62,6 +63,7 @@ def create_schedule(payload: ScheduleCreate, db: Session = Depends(get_db)):
         target_type=payload.target_type,
         target_id=payload.target_id,
         screen_name=payload.screen_name,
+        screen_source=payload.screen_source,
         script_id=payload.script_id,
         command=payload.command,
         enabled=payload.enabled,
@@ -99,6 +101,8 @@ def update_schedule(sched_id: int, payload: ScheduleUpdate, db: Session = Depend
         sched.target_id = data["target_id"]
     if "screen_name" in data:
         sched.screen_name = data["screen_name"]
+    if "screen_source" in data:
+        sched.screen_source = data["screen_source"]
     if "script_id" in data:
         sched.script_id = data["script_id"]
     if "command" in data:

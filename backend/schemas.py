@@ -51,6 +51,7 @@ class ScheduleCreate(ScheduleBase):
     target_type: str = Field("task", pattern="^(task|screen|script)$")
     target_id: Optional[int] = None
     screen_name: Optional[str] = None
+    screen_source: Optional[str] = None
     script_id: Optional[int] = None
     command: Optional[str] = None
     enabled: bool = True
@@ -62,6 +63,7 @@ class ScheduleUpdate(BaseModel):
     target_type: Optional[str] = Field(None, pattern="^(task|screen|script)$")
     target_id: Optional[int] = None
     screen_name: Optional[str] = None
+    screen_source: Optional[str] = None
     script_id: Optional[int] = None
     command: Optional[str] = None
     enabled: Optional[bool] = None
@@ -72,6 +74,7 @@ class ScheduleOut(ScheduleBase):
     target_type: str
     target_id: Optional[int] = None
     screen_name: Optional[str] = None
+    screen_source: Optional[str] = None
     script_id: Optional[int] = None
     command: Optional[str] = None
     enabled: bool

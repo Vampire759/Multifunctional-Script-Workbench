@@ -36,6 +36,7 @@ class Schedule(Base):
     target_type = Column(String, nullable=False, default="task")  # task | screen | script
     target_id = Column(Integer, ForeignKey("task.id", ondelete="CASCADE"), nullable=True)
     screen_name = Column(String, nullable=True)
+    screen_source = Column(String, nullable=True)  # container | local
     script_id = Column(Integer, ForeignKey("script.id", ondelete="CASCADE"), nullable=True)
     command = Column(Text)
     enabled = Column(Boolean, default=True)
