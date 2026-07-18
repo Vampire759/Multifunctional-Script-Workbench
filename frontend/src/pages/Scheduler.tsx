@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Clock, Plus, Trash2, Play, Power, RefreshCw, Calendar, Terminal, Code2, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import PageHeader from "../components/PageHeader";
@@ -73,7 +73,7 @@ export default function Scheduler() {
     load();
   }, []);
 
-  const handleCreate = async () => {
+  const handleCreate = useCallback(async () => {
     if (!form.name || !form.cron_expr) {
       alert("请填写名称和Cron表达式");
       return;
@@ -116,7 +116,7 @@ export default function Scheduler() {
     } catch (e: any) {
       alert(e?.response?.data?.detail || "创建失败");
     }
-  };
+  }, [form, tasks, scripts]);
 
   const handleToggle = async (s: Schedule) => {
     try {
