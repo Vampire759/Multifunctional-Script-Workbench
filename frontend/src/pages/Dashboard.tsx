@@ -212,7 +212,7 @@ export default function Dashboard() {
   const scriptScreens = screens.filter((s) => s.name.startsWith("script_"));
 
   return (
-    <div className="p-6 max-w-7xl mx-auto flex flex-col h-[calc(100vh-2rem)]">
+    <div className="flex flex-col h-full p-6">
       <PageHeader
         title="任务台"
         subtitle="查看运行中的任务和实时日志"

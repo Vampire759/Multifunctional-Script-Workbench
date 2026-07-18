@@ -355,7 +355,7 @@ export default function LogCenter() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto flex flex-col h-[calc(100vh-2rem)]">
+    <div className="flex flex-col h-full p-6">
       <PageHeader
         title="日志中心"
         subtitle="管理 Screen 会话，实时监控服务器端命令执行日志"
