@@ -359,8 +359,8 @@ export default function Scripts() {
         </AnimatePresence>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
-        <div className="lg:col-span-1 flex flex-col">
-          <div className="glass-card flex-1 flex flex-col">
+        <div className="lg:col-span-1 flex flex-col min-h-0">
+          <div className="glass-card flex-1 flex flex-col min-h-0">
             <div className="p-4 border-b border-ink-700/60">
               <h3 className="text-sm font-mono text-muted-dim uppercase tracking-wider">
                 {tab === "db" ? "脚本列表" : "scripts目录文件"}
@@ -470,14 +470,14 @@ export default function Scripts() {
           </div>
         </div>
 
-        <div className="lg:col-span-3 flex flex-col">
+        <div className="lg:col-span-3 flex flex-col min-h-0">
           <AnimatePresence>
             {editingScript ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="glass-card flex-1 flex flex-col"
+                className="glass-card flex-1 flex flex-col min-h-0"
               >
                 <div className="p-4 border-b border-ink-700/60 flex items-center justify-between">
                   <div>
@@ -505,7 +505,7 @@ export default function Scripts() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="glass-card h-full flex flex-col"
+                className="glass-card flex-1 flex flex-col min-h-0"
               >
                 <div className="p-4 border-b border-ink-700/60 flex items-center justify-between">
                   <div>

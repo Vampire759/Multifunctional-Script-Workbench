@@ -218,7 +218,7 @@ export default function Scheduler() {
                       ...form, 
                       target_type: newValue,
                       target_id: newValue === "task" ? (tasks[0]?.id || 0) : 0,
-                      screen_name: newValue === "screen" ? form.screen_name : "",
+                      screen_name: newValue === "screen" ? (screens[0]?.name || "") : "",
                       script_id: newValue === "script" ? (scripts[0]?.id || 0) : 0,
                     });
                   }}
