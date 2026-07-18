@@ -251,7 +251,7 @@ export default function Scripts() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col h-full">
       <PageHeader
         title="脚本管理"
         subtitle="管理可拓展的 Python 脚本，支持生成模板、上传、执行"
@@ -281,83 +281,84 @@ export default function Scripts() {
         }
       />
 
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => { setTab("db"); setSelectedScript(null); setEditingScript(null); }}
-          className={`px-4 py-2 rounded-lg text-sm font-mono transition-all flex items-center gap-2 ${
-            tab === "db"
-              ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
-              : "bg-ink-800/40 text-muted hover:text-gray-200 border border-transparent"
-          }`}
-        >
-          <FileText size={14} /> 数据库脚本
-        </button>
-        <button
-          onClick={() => { setTab("files"); setSelectedScript(null); setEditingScript(null); }}
-          className={`px-4 py-2 rounded-lg text-sm font-mono transition-all flex items-center gap-2 ${
-            tab === "files"
-              ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
-              : "bg-ink-800/40 text-muted hover:text-gray-200 border border-transparent"
-          }`}
-        >
-          <FolderOpen size={14} /> scripts目录
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {showCreate && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="glass-card p-4 mb-4"
+      <div className="flex-1 flex flex-col p-4 overflow-hidden">
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => { setTab("db"); setSelectedScript(null); setEditingScript(null); }}
+            className={`px-4 py-2 rounded-lg text-sm font-mono transition-all flex items-center gap-2 ${
+              tab === "db"
+                ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
+                : "bg-ink-800/40 text-muted hover:text-gray-200 border border-transparent"
+            }`}
           >
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="w-48">
-                <label className="text-xs font-mono text-muted-dim">脚本名称</label>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="input-cyber mt-1"
-                  placeholder="my_script"
-                />
-              </div>
-              <div className="w-48">
-                <label className="text-xs font-mono text-muted-dim">脚本类型</label>
-                <select
-                  value={scriptType}
-                  onChange={(e) => setScriptType(e.target.value)}
-                  className="input-cyber mt-1"
-                >
-                  <option value="general">通用脚本</option>
-                  <option value="scrape">爬虫脚本</option>
-                </select>
-              </div>
-              <div className="flex-1 min-w-[300px]">
-                <label className="text-xs font-mono text-muted-dim">描述（可选）</label>
-                <input
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  className="input-cyber mt-1"
-                  placeholder="脚本功能描述"
-                />
-              </div>
-              <button onClick={handleCreate} className="btn-amber flex items-center gap-2 mt-5">
-                <Plus size={14} /> 生成模板
-              </button>
-              <button onClick={() => setShowCreate(false)} className="btn-ghost mt-5">取消</button>
-            </div>
-            <div className="mt-3 p-3 bg-ink-900/40 rounded-lg border border-ink-700/40">
-              <p className="text-xs text-muted-dim font-mono">
-                💡 提示：生成的模板包含 <code className="text-neon-cyan">send_progress()</code> 和 <code className="text-neon-cyan">send_log()</code> 函数，
-                在模板中实现功能即可实现前后端实时监控。
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <FileText size={14} /> 数据库脚本
+          </button>
+          <button
+            onClick={() => { setTab("files"); setSelectedScript(null); setEditingScript(null); }}
+            className={`px-4 py-2 rounded-lg text-sm font-mono transition-all flex items-center gap-2 ${
+              tab === "files"
+                ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
+                : "bg-ink-800/40 text-muted hover:text-gray-200 border border-transparent"
+            }`}
+          >
+            <FolderOpen size={14} /> scripts目录
+          </button>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-180px)]">
+        <AnimatePresence>
+          {showCreate && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="glass-card p-4 mb-4"
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-48">
+                  <label className="text-xs font-mono text-muted-dim">脚本名称</label>
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="input-cyber mt-1"
+                    placeholder="my_script"
+                  />
+                </div>
+                <div className="w-48">
+                  <label className="text-xs font-mono text-muted-dim">脚本类型</label>
+                  <select
+                    value={scriptType}
+                    onChange={(e) => setScriptType(e.target.value)}
+                    className="input-cyber mt-1"
+                  >
+                    <option value="general">通用脚本</option>
+                    <option value="scrape">爬虫脚本</option>
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[300px]">
+                  <label className="text-xs font-mono text-muted-dim">描述（可选）</label>
+                  <input
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    className="input-cyber mt-1"
+                    placeholder="脚本功能描述"
+                  />
+                </div>
+                <button onClick={handleCreate} className="btn-amber flex items-center gap-2 mt-5">
+                  <Plus size={14} /> 生成模板
+                </button>
+                <button onClick={() => setShowCreate(false)} className="btn-ghost mt-5">取消</button>
+              </div>
+              <div className="mt-3 p-3 bg-ink-900/40 rounded-lg border border-ink-700/40">
+                <p className="text-xs text-muted-dim font-mono">
+                  💡 提示：生成的模板包含 <code className="text-neon-cyan">send_progress()</code> 和 <code className="text-neon-cyan">send_log()</code> 函数，
+                  在模板中实现功能即可实现前后端实时监控。
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
         <div className="lg:col-span-1 flex flex-col">
           <div className="glass-card flex-1 flex flex-col">
             <div className="p-4 border-b border-ink-700/60">
@@ -554,6 +555,8 @@ export default function Scripts() {
             )}
           </AnimatePresence>
         </div>
+      </div>
+
       </div>
 
       <AnimatePresence>

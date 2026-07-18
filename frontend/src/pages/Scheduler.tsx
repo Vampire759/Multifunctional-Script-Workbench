@@ -59,6 +59,9 @@ export default function Scheduler() {
       if (t.length > 0 && form.target_type === "task" && form.target_id === 0) {
         setForm((f) => ({ ...f, target_id: t[0].id }));
       }
+      if (allScreens.length > 0 && form.target_type === "screen" && !form.screen_name) {
+        setForm((f) => ({ ...f, screen_name: allScreens[0].name }));
+      }
       if (scr.length > 0 && form.target_type === "script" && form.script_id === 0) {
         setForm((f) => ({ ...f, script_id: scr[0].id }));
       }
