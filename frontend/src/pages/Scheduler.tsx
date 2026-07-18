@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Clock, Plus, Trash2, Play, Power, RefreshCw, Calendar, Terminal, Code2, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import PageHeader from "../components/PageHeader";
-import { listSchedules, createSchedule, updateSchedule, deleteSchedule, triggerSchedule, listTasks, listScreens, listScripts, type Schedule, type Task, type ScreenTask, type Script } from "../lib/api";
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, triggerSchedule, listTasks, listScreens, listLocalScreens, listScripts, type Schedule, type Task, type ScreenTask, type Script } from "../lib/api";
 
 const cronPresets = [
   { label: "每分钟", value: "* * * * *" },
@@ -40,11 +40,22 @@ export default function Scheduler() {
   const load = async () => {
     setLoading(true);
     try {
-      const [s, t, sc, scr] = await Promise.all([listSchedules(), listTasks(), listScreens(), listScripts()]);
+      const [s, t, sc, scr, ls] = await Promise.all([
+        listSchedules(), 
+        listTasks(), 
+        listScreens(), 
+        listScripts(),
+        listLocalScreens()
+      ]);
       setSchedules(s);
       setTasks(t);
-      setScreens(sc);
       setScripts(scr);
+      
+      const containerScreens = sc.map((screen) => ({ ...screen, source: "container" }));
+      const localScreens = (ls.success && ls.data ? ls.data : []).map((screen) => ({ ...screen, source: "local" }));
+      const allScreens: (ScreenTask & { source?: string })[] = [...containerScreens, ...localScreens];
+      setScreens(allScreens as ScreenTask[]);
+      
       if (t.length > 0 && form.target_type === "task" && form.target_id === 0) {
         setForm((f) => ({ ...f, target_id: t[0].id }));
       }
@@ -244,11 +255,20 @@ export default function Scheduler() {
                   className="input-cyber mt-1"
                 >
                   {screens.length === 0 && <option value="">暂无会话</option>}
-                  {screens.map((s) => (
-                    <option key={s.name} value={s.name} className="bg-ink-900">
-                      {s.name} ({s.status})
-                    </option>
-                  ))}
+                  <optgroup label="容器内会话">
+                    {screens.filter((s) => (s as any).source === "container").map((s) => (
+                      <option key={s.name} value={s.name} className="bg-ink-900">
+                        {s.name} ({s.status})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="宿主机会话">
+                    {screens.filter((s) => (s as any).source === "local").map((s) => (
+                      <option key={s.name} value={s.name} className="bg-ink-900">
+                        {s.name} ({s.status})
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             )}
