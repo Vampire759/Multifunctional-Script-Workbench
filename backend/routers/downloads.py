@@ -148,7 +148,10 @@ async def delete_download(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="任务不存在")
     
     session_name = f"dl_task_{task_id}"
-    await screen_service.stop_screen(session_name)
+    try:
+        await screen_service.stop_screen(session_name, db)
+    except Exception:
+        pass
     
     db.delete(task)
     db.commit()
