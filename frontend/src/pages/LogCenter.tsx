@@ -788,7 +788,7 @@ export default function LogCenter() {
                 ) : (
                   <>
                     <div 
-                      className="flex-1 p-4 overflow-y-auto font-mono text-sm min-h-0" 
+                      className="flex-1 p-4 overflow-y-auto overflow-x-hidden font-mono text-sm min-h-0" 
                       ref={logContainerRef}
                       onScroll={handleScroll}
                     >
