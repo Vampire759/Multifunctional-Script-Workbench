@@ -85,7 +85,7 @@ export default function PackageSettings() {
   const installedCount = packages.filter(p => p.installed).length;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="flex flex-col h-full">
       <PageHeader title="脚本库设置" icon={<Package size={24} />} />
 
       <AnimatePresence>
@@ -94,7 +94,7 @@ export default function PackageSettings() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`p-4 rounded-lg mb-6 flex items-center gap-2 ${
+            className={`mx-4 mt-4 p-4 rounded-lg flex items-center gap-2 ${
               message.type === "success" ? "bg-neon-green/10 text-neon-green" : "bg-neon-rose/10 text-neon-rose"
             }`}
           >
@@ -104,95 +104,99 @@ export default function PackageSettings() {
         )}
       </AnimatePresence>
 
-      <div className="glass-card p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-100">已安装的包</h3>
-            <p className="text-sm text-muted-dim">{installedCount} / {packages.length} 个包已安装</p>
-          </div>
-          <button
-            onClick={handleInstallAll}
-            disabled={installing === "all"}
-            className="btn-amber flex items-center gap-2 disabled:opacity-50"
-          >
-            <Download size={16} />
-            {installing === "all" ? "安装中..." : "安装全部"}
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {packages.length === 0 ? (
-            <div className="text-center text-muted-dim py-8">
-              <Package size={32} className="mx-auto mb-3 opacity-50" />
-              <p>暂无包配置</p>
+      <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+        <div className="glass-card flex flex-col flex-1 min-h-0">
+          <div className="p-4 border-b border-ink-700/60 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-100">已安装的包</h3>
+              <p className="text-sm text-muted-dim">{installedCount} / {packages.length} 个包已安装</p>
             </div>
-          ) : (
-            packages.map((pkg) => (
-              <motion.div
-                key={pkg.name}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex items-center justify-between p-3 bg-ink-800/30 rounded-lg hover:bg-ink-800/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  {pkg.installed ? (
-                    <CheckCircle size={16} className="text-neon-green" />
-                  ) : (
-                    <XCircle size={16} className="text-neon-rose" />
-                  )}
-                  <span className="font-mono text-sm text-gray-200">{pkg.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!pkg.installed && (
-                    <button
-                      onClick={() => handleInstall(pkg.name)}
-                      disabled={installing === pkg.name}
-                      className="btn-ghost text-xs flex items-center gap-1 hover:text-neon-cyan"
-                    >
-                      <RefreshCw size={12} className={installing === pkg.name ? "animate-spin" : ""} />
-                      安装
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleRemove(pkg.name)}
-                    className="p-1.5 rounded hover:bg-ink-700/40 text-muted hover:text-neon-rose transition-colors"
-                    title="移除"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </motion.div>
-            ))
-          )}
-        </div>
-      </div>
+            <button
+              onClick={handleInstallAll}
+              disabled={installing === "all"}
+              className="btn-amber flex items-center gap-2 disabled:opacity-50"
+            >
+              <Download size={16} />
+              {installing === "all" ? "安装中..." : "安装全部"}
+            </button>
+          </div>
 
-      <div className="glass-card p-6">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">添加新包</h3>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newPackage}
-            onChange={(e) => setNewPackage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddPackage()}
-            placeholder="输入包名，例如: beautifulsoup4 或 requests==2.31.0"
-            className="flex-1 input-cyber"
-          />
-          <button
-            onClick={handleAddPackage}
-            disabled={!newPackage.trim() || installing === newPackage}
-            className="btn-amber flex items-center gap-2 disabled:opacity-50"
-          >
-            <Plus size={16} />
-            添加并安装
-          </button>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-2">
+              {packages.length === 0 ? (
+                <div className="text-center text-muted-dim py-8">
+                  <Package size={32} className="mx-auto mb-3 opacity-50" />
+                  <p>暂无包配置</p>
+                </div>
+              ) : (
+                packages.map((pkg) => (
+                  <motion.div
+                    key={pkg.name}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-center justify-between p-3 bg-ink-800/30 rounded-lg hover:bg-ink-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      {pkg.installed ? (
+                        <CheckCircle size={16} className="text-neon-green" />
+                      ) : (
+                        <XCircle size={16} className="text-neon-rose" />
+                      )}
+                      <span className="font-mono text-sm text-gray-200">{pkg.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!pkg.installed && (
+                        <button
+                          onClick={() => handleInstall(pkg.name)}
+                          disabled={installing === pkg.name}
+                          className="btn-ghost text-xs flex items-center gap-1 hover:text-neon-cyan"
+                        >
+                          <RefreshCw size={12} className={installing === pkg.name ? "animate-spin" : ""} />
+                          安装
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemove(pkg.name)}
+                        className="p-1.5 rounded hover:bg-ink-700/40 text-muted hover:text-neon-rose transition-colors"
+                        title="移除"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-        <div className="mt-4 p-3 bg-ink-800/30 rounded-lg">
-          <div className="flex items-start gap-2">
-            <AlertCircle size={14} className="text-neon-amber mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-muted-dim">
-              添加的包会自动安装并保存到 requirements.txt 文件中。格式支持：包名（如 beautifulsoup4）、指定版本（如 requests==2.31.0）、版本范围（如 requests&gt;=2.30.0）。
-            </p>
+
+        <div className="glass-card p-4">
+          <h3 className="text-lg font-semibold text-gray-100 mb-4">添加新包</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newPackage}
+              onChange={(e) => setNewPackage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddPackage()}
+              placeholder="输入包名，例如: beautifulsoup4 或 requests==2.31.0"
+              className="flex-1 input-cyber"
+            />
+            <button
+              onClick={handleAddPackage}
+              disabled={!newPackage.trim() || installing === newPackage}
+              className="btn-amber flex items-center gap-2 disabled:opacity-50"
+            >
+              <Plus size={16} />
+              添加并安装
+            </button>
+          </div>
+          <div className="mt-4 p-3 bg-ink-800/30 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={14} className="text-neon-amber mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-muted-dim">
+                添加的包会自动安装并保存到 requirements.txt 文件中。格式支持：包名（如 beautifulsoup4）、指定版本（如 requests==2.31.0）、版本范围（如 requests&gt;=2.30.0）。
+              </p>
+            </div>
           </div>
         </div>
       </div>
