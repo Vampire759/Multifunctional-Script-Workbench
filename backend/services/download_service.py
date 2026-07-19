@@ -207,34 +207,48 @@ async def execute_download(db: Session, task_id: int):
 
 async def _execute_script_via_screen(db: Session, task_id: int):
     """通过screen执行脚本命令，同时广播日志到下载任务和screen会话"""
-    task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
-    if not task or not task.command:
-        return
-
-    await _update_task(db, task_id, {"status": "running", "started_at": datetime.utcnow()})
-    await _broadcast(task_id, {"type": "start", "payload": {}})
-
-    session_name = f"dl_task_{task_id}"
+    from backend.database import SessionLocal
     
-    await _broadcast(task_id, {"type": "log", "payload": {"log_line": f"[Screen] 启动会话: {session_name}"}})
-    await _broadcast(task_id, {"type": "log", "payload": {"log_line": f"$ {task.command}"}})
+    local_db = SessionLocal()
+    try:
+        task = local_db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+        if not task or not task.command:
+            return
 
-    success = await screen_service.create_screen(session_name, task.command, db)
-    
-    if success:
-        await _broadcast(task_id, {"type": "log", "payload": {"log_line": "[Screen] 脚本已启动，可以在任务台查看实时日志", "level": "success"}})
-        await _update_task(db, task_id, {"status": "running"})
+        if task.status == "running":
+            await _broadcast(task_id, {"type": "log", "payload": {"log_line": "[Screen] 任务已在运行中，跳过重复执行", "level": "warning"}})
+            return
+
+        await _update_task(local_db, task_id, {"status": "running", "started_at": datetime.utcnow()})
+        await _broadcast(task_id, {"type": "start", "payload": {}})
+
+        session_name = f"dl_task_{task_id}"
         
-        asyncio.create_task(_mirror_screen_logs(task_id, session_name))
-    else:
-        await _update_task(db, task_id, {"status": "failed", "error": "脚本启动失败", "finished_at": datetime.utcnow()})
-        await _broadcast(task_id, {"type": "error", "payload": {"error": "脚本启动失败"}})
+        await _broadcast(task_id, {"type": "log", "payload": {"log_line": f"[Screen] 启动会话: {session_name}"}})
+        await _broadcast(task_id, {"type": "log", "payload": {"log_line": f"$ {task.command}"}})
+
+        success = await screen_service.create_screen(session_name, task.command, local_db)
+        
+        if success:
+            await _broadcast(task_id, {"type": "log", "payload": {"log_line": "[Screen] 脚本已启动，可以在任务台查看实时日志", "level": "success"}})
+            await _update_task(local_db, task_id, {"status": "running"})
+            
+            asyncio.create_task(_mirror_screen_logs(task_id, session_name))
+        else:
+            await _update_task(local_db, task_id, {"status": "failed", "error": "脚本启动失败", "finished_at": datetime.utcnow()})
+            await _broadcast(task_id, {"type": "error", "payload": {"error": "脚本启动失败"}})
+    finally:
+        local_db.close()
 
 
 async def _mirror_screen_logs(task_id: int, session_name: str):
     """将screen会话的日志镜像到下载任务的WebSocket"""
     from backend.services.websocket_hub import hub
+    from backend.database import SessionLocal
     import asyncio
+    
+    last_pos = 0
+    log_history = []
     
     while True:
         try:
@@ -242,6 +256,22 @@ async def _mirror_screen_logs(task_id: int, session_name: str):
             screen_exists = any(s["name"] == session_name for s in screens)
             if not screen_exists:
                 await _broadcast(task_id, {"type": "done", "payload": {"status": "exited"}})
+                
+                try:
+                    db = SessionLocal()
+                    task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+                    if task and task.status == "running":
+                        has_error = any(
+                            "[错误]" in line or "Error" in line or "error" in line.lower() or 
+                            "Exception" in line or "Traceback" in line or "Invalid" in line
+                            for line in log_history
+                        )
+                        task.status = "failed" if has_error else "success"
+                        task.finished_at = datetime.utcnow()
+                        db.commit()
+                    db.close()
+                except Exception:
+                    pass
                 break
             
             log_path = screen_service.get_session_log_path(session_name)
@@ -249,21 +279,24 @@ async def _mirror_screen_logs(task_id: int, session_name: str):
                 await asyncio.sleep(1)
                 continue
             
-            file_size = os.path.getsize(log_path)
-            if file_size == 0:
-                await asyncio.sleep(1)
-                continue
-            
             try:
+                file_size = os.path.getsize(log_path)
+                if last_pos > file_size:
+                    last_pos = 0
+                
                 with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    f.seek(last_pos)
                     content = f.read()
                     if content:
                         lines = content.split("\n")
-                        last_lines = lines[-5:] if len(lines) > 5 else lines
-                        for line in last_lines:
+                        for line in lines:
                             if line.strip():
                                 cleaned = _clean_log_content(line.strip())
+                                log_history.append(cleaned)
+                                if len(log_history) > 100:
+                                    log_history = log_history[-50:]
                                 await _broadcast(task_id, {"type": "log", "payload": {"log_line": cleaned}})
+                        last_pos = f.tell()
             except Exception:
                 pass
             
@@ -278,7 +311,7 @@ def _clean_log_content(line: str) -> str:
     return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', line).strip()
 
 
-def create_download_task(db: Session, video_url: str = "", source_url: str = "", title: str = "", filename: str = "", script_id: int | None = None, command: str = "") -> int:
+def create_download_task(db: Session, video_url: str = "", source_url: str = "", title: str = "", filename: str = "", script_id: int | None = None, command: str = "", name: str = "") -> int:
     """创建下载任务"""
     task = DownloadTask(
         video_url=video_url,
@@ -287,6 +320,7 @@ def create_download_task(db: Session, video_url: str = "", source_url: str = "",
         command=command,
         title=title,
         filename=filename,
+        name=name,
         status="pending",
         max_retries=3,
     )

@@ -12,6 +12,7 @@ services:
       - ./logs:/app/logs
       - ./scripts:/app/scripts
       - ./downloads:/app/downloads
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
       - API_KEY=your_api_key_here
@@ -19,6 +20,8 @@ services:
       - SCREENDIR=/app/screen_sockets
       - LOG_LEVEL=info
       - TZ=Asia/Shanghai
+      - DOCKER_API_TIMEOUT=30
+      - PYTHONWARNINGS=ignore
     restart: unless-stopped
     privileged: false
     extra_hosts:

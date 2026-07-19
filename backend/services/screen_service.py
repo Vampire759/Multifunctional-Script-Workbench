@@ -125,15 +125,16 @@ async def create_screen(session_name: str, command: str, db: Session) -> bool:
     screens = await list_screens()
     existing_screen = any(s["name"] == session_name for s in screens)
     if existing_screen:
-        logger.info(f"Session {session_name} already exists, reusing existing session")
+        logger.info(f"Session {session_name} already exists")
         task = db.query(ScreenTask).filter(ScreenTask.name == session_name).first()
-        if task:
+        if task and task.status != "running":
             task.status = "running"
             task.started_at = datetime.utcnow()
             db.commit()
         log_path = get_session_log_path(session_name)
         if session_name not in _active_broadcasters or _active_broadcasters[session_name].done():
             _active_broadcasters[session_name] = asyncio.create_task(_broadcast_log(session_name, log_path))
+        logger.info(f"Session {session_name} already running, skipping command execution")
         return True
     
     log_path = get_screen_log_path(session_name)

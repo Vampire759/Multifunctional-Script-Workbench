@@ -20,13 +20,14 @@ async def create_download(
     command: str = "",
     title: str = "",
     filename: str = "",
+    name: str = "",
     db: Session = Depends(get_db),
 ):
     """创建下载任务并立即执行"""
     if not video_url and not command:
         raise HTTPException(status_code=400, detail="video_url 或 command 必填")
 
-    task_id = download_service.create_download_task(db, video_url, source_url, title, filename, script_id, command)
+    task_id = download_service.create_download_task(db, video_url, source_url, title, filename, script_id, command, name)
     asyncio.create_task(download_service.execute_download(db, task_id))
 
     return GenericResp(success=True, message="下载任务已创建", data={"task_id": task_id})
@@ -69,6 +70,7 @@ def list_downloads(
     return [
         {
             "id": t.id,
+            "name": t.name,
             "video_url": t.video_url,
             "source_url": t.source_url,
             "script_id": t.script_id,

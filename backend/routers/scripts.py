@@ -1,5 +1,6 @@
 """脚本管理 API 路由"""
 import os
+import time
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +11,8 @@ from backend.schemas import GenericResp
 from backend.services import script_service, screen_service
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"])
+
+_script_cache = {"data": None, "timestamp": 0, "ttl": 60}
 
 
 class CreateScriptRequest(BaseModel):
@@ -29,19 +32,46 @@ class ExecuteScriptRequest(BaseModel):
 
 @router.get("/", response_model=list[dict])
 def list_scripts(db: Session = Depends(get_db)):
+    now = time.time()
+    if _script_cache["data"] and now - _script_cache["timestamp"] < _script_cache["ttl"]:
+        return _script_cache["data"]
+    
     scripts = script_service.get_scripts(db)
-    return [
-        {
-            "id": s.id,
-            "name": s.name,
-            "filename": s.filename,
-            "description": s.description,
-            "status": s.status,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
-        }
-        for s in scripts
-    ]
+    db_scripts_by_filename = {s.filename: s for s in scripts}
+    
+    script_files = script_service.list_script_files()
+    
+    result = []
+    max_db_id = max((s.id for s in scripts), default=0)
+    
+    for idx, sf in enumerate(script_files):
+        filename = sf["filename"]
+        if filename in db_scripts_by_filename:
+            s = db_scripts_by_filename[filename]
+            result.append({
+                "id": s.id,
+                "name": s.name,
+                "filename": s.filename,
+                "description": s.description,
+                "status": s.status,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            })
+        else:
+            name = filename.replace(".py", "")
+            result.append({
+                "id": max_db_id + idx + 1,
+                "name": name,
+                "filename": filename,
+                "description": f"文件系统脚本: {filename}",
+                "status": "available",
+                "created_at": None,
+                "updated_at": None,
+            })
+    
+    _script_cache["data"] = result
+    _script_cache["timestamp"] = now
+    return result
 
 
 @router.get("/files", response_model=list[dict])

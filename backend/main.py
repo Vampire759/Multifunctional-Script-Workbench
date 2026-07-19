@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from backend.database import init_db
 from backend.services.scheduler_service import start_scheduler, shutdown_scheduler
 from backend.services.auth_service import init_admin_user
-from backend.routers import scrape, tasks, schedules, results, downloads, auth, screen, scripts, terminal, local_screen, packages
+from backend.routers import scrape, tasks, schedules, results, downloads, auth, screen, scripts, terminal, local_screen, packages, download_templates, docker_monitor, docker_push
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
@@ -63,17 +63,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+print(f"[Router] Including scrape: {len(scrape.router.routes)} routes")
 app.include_router(scrape.router)
+print(f"[Router] Including tasks: {len(tasks.router.routes)} routes")
 app.include_router(tasks.router)
+print(f"[Router] Including schedules: {len(schedules.router.routes)} routes")
 app.include_router(schedules.router)
+print(f"[Router] Including results: {len(results.router.routes)} routes")
 app.include_router(results.router)
+print(f"[Router] Including downloads: {len(downloads.router.routes)} routes")
 app.include_router(downloads.router)
+print(f"[Router] Including download_templates: {len(download_templates.router.routes)} routes")
+app.include_router(download_templates.router)
+print(f"[Router] Including docker_monitor: {len(docker_monitor.router.routes)} routes")
+app.include_router(docker_monitor.router)
+print(f"[Router] Including auth: {len(auth.router.routes)} routes")
 app.include_router(auth.router)
+print(f"[Router] Including screen: {len(screen.router.routes)} routes")
 app.include_router(screen.router)
+print(f"[Router] Including scripts: {len(scripts.router.routes)} routes")
 app.include_router(scripts.router)
+print(f"[Router] Including terminal: {len(terminal.router.routes)} routes")
 app.include_router(terminal.router)
+print(f"[Router] Including local_screen: {len(local_screen.router.routes)} routes")
 app.include_router(local_screen.router)
+print(f"[Router] Including packages: {len(packages.router.routes)} routes")
 app.include_router(packages.router)
+print(f"[Router] Including docker_push: {len(docker_push.router.routes)} routes")
+app.include_router(docker_push.router)
 
 
 @app.get("/api/health")

@@ -9,6 +9,7 @@ import Scripts from "./pages/Scripts";
 import Profile from "./pages/Profile";
 import LocalScreen from "./pages/LocalScreen";
 import PackageSettings from "./pages/PackageSettings";
+import DockerMonitor from "./pages/DockerMonitor";
 
 import Login from "./pages/Login";
 
@@ -34,12 +35,14 @@ export default function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/scheduler" element={<Scheduler />} />
                 <Route path="/downloads" element={<Downloads />} />
+                <Route path="/downloads/:id" element={<Downloads />} />
                 <Route path="/logs" element={<LogCenter />} />
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/scripts" element={<Scripts />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/local-screen" element={<LocalScreen />} />
                 <Route path="/packages" element={<PackageSettings />} />
+                <Route path="/docker" element={<DockerMonitor />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Layout>

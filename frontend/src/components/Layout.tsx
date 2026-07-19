@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Clock, Database, Settings, Terminal, Download, ScrollText, LogOut, Code2, Monitor, Package } from "lucide-react";
+import { LayoutDashboard, Clock, Database, Settings, Terminal, Download, ScrollText, LogOut, Code2, Monitor, Package, Container } from "lucide-react";
 import { motion } from "framer-motion";
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { to: "/scripts", label: "脚本管理", icon: Code2 },
   { to: "/packages", label: "脚本库", icon: Package },
   { to: "/local-screen", label: "本地Screen", icon: Monitor },
+  { to: "/docker", label: "Docker监控", icon: Container },
   { to: "/tasks", label: "任务管理", icon: Settings },
   { to: "/profile", label: "个人设置", icon: Database },
 ];

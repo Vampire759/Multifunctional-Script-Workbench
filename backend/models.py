@@ -86,6 +86,7 @@ class DownloadTask(Base):
     __tablename__ = "download_task"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=True)
     video_url = Column(Text)
     source_url = Column(Text)
     script_id = Column(Integer, ForeignKey("script.id"))
@@ -104,6 +105,23 @@ class DownloadTask(Base):
     output_path = Column(Text)
     started_at = Column(DateTime)
     finished_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    script = relationship("Script")
+
+
+class DownloadTemplate(Base):
+    """下载任务模板"""
+    __tablename__ = "download_template"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    script_id = Column(Integer, ForeignKey("script.id"))
+    command_format = Column(Text)
+    output_format = Column(Text)
+    push_format = Column(Text)
+    custom_command = Column(Text)
+    description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     script = relationship("Script")
